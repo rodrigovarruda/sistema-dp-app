@@ -795,8 +795,8 @@ document.addEventListener('click',e=>{
     const recsFunc=[...grupos.values()].map(g=>`<div class="folha">${g.join('')}</div>`).join('');
     const fonte=document.querySelector('link[href*="fonts.googleapis"]')?.href||'';
     const sc='scr'+'ipt';
-    // quantos recibos por folha A4 (por funcionário, 1, 2, 3 ou máximo); a escolha fica guardada neste navegador
-    let pp='func';try{pp=localStorage.getItem('sistemaDP.porFolha2')||'func'}catch(x){}
+    // recibos por folha A4: começa sempre em "1 funcionário por folha" (pedido do usuário); 1, 2, 3 ou máximo valem só para esta impressão
+    const pp='func';
     w.document.write(`<!doctype html><html lang="pt-BR" data-theme="light"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Recibos · Sistema DP</title>
       ${fonte?`<link rel="stylesheet" href="${fonte}">`:''}<style>${css}
       @page{margin:8mm}
@@ -825,7 +825,7 @@ document.addEventListener('click',e=>{
       @media print{.barra{display:none}body{padding:0}.recibo{margin:0 auto}}</style></head>
       <body class="pp${pp}"><div class="barra"><span class="pp-lbl">Recibos por folha:</span><button class="btn pp-op" data-pp="func">1 funcionário por folha</button><button class="btn pp-op" data-pp="1">1</button><button class="btn pp-op" data-pp="2">2</button><button class="btn pp-op" data-pp="3">3</button><button class="btn pp-op" data-pp="max">Máximo</button>
       <button class="btn primary" onclick="print()">Imprimir / salvar PDF</button><button class="btn" onclick="close()">Fechar esta aba</button></div><div class="recs">${recs}</div><div class="recs-func">${recsFunc}</div>
-      <${sc}>function setPP(n){document.body.className='pp'+n;document.querySelectorAll('.pp-op').forEach(function(b){b.classList.toggle('primary',b.dataset.pp===n)});try{localStorage.setItem('sistemaDP.porFolha2',n)}catch(e){}}
+      <${sc}>function setPP(n){document.body.className='pp'+n;document.querySelectorAll('.pp-op').forEach(function(b){b.classList.toggle('primary',b.dataset.pp===n)})}
       document.querySelectorAll('.pp-op').forEach(function(b){b.onclick=function(){setPP(b.dataset.pp)}});setPP('${pp}');</${sc}></body></html>`);
     w.document.close();
     return;
