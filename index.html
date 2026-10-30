@@ -1558,7 +1558,7 @@ function reciboHTML(f,tipo,rec){
   } else {
     const ks=Object.keys(BEN_NOMES).filter(k=>c.itens[k]);
     const fe=S.fechF[f.id],al=tipo==='alelo'||tipo==='natal'?fe.alelo:null,soma=ks.reduce((a,k)=>a+c.itens[k].valor,0),noCartao=fe?aleloSoma(fe.alelo):0;
-    valor=tipo==='alelo'?soAlelo(al):tipo==='natal'?(+al.natal||0):soma-noCartao;titulo=tipo==='natal'?'Recibo passagens NatalCard':'Recibo de auxílio-transporte';
+    valor=tipo==='alelo'?soAlelo(al):tipo==='natal'?(+al.natal||0):soma-noCartao;titulo=tipo==='natal'?'Recibo de passagens NatalCard':'Recibo de auxílio-transporte';
     texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)})${tipo==='natal'?', creditada no cartão NatalCard':''}${tipo==='alelo'?`, creditada ${al.alim&&al.livre?'nos cartões Alelo':al.alim?'no cartão Alelo Alimentação':'no cartão Alelo Saldo Livre'}${S.recDetalhe&&al.alim&&al.livre?` (${['Alelo Alimentação '+brl(al.alim),'Alelo Saldo Livre '+brl(al.livre)].join('; ')})`:''}`:''}, referente ao auxílio-transporte do mês de <b>${PROX_NOME}/${MES===11?ANO+1:ANO}</b>.`;
     const dt=c.rateio.reduce((a,b)=>a+b.dias,0)-(temAvulso(f)?Object.entries(S.ponto[f.id]).filter(([d,r])=>CODES[r.c].trab&&vincDia(f,+d)==='avulso').length:0);
     dias=`Dias considerados em ${MES_NOME}: ${nfmt(dt)} · Obra(s): ${c.rateio.map(x=>esc(x.obra)).join(', ')||'—'}`;
