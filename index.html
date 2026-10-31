@@ -1257,23 +1257,39 @@ function prepImport(d){
     let f=ALL.find(y=>soDig(y.cpf)&&soDig(y.cpf)===soDig(x.cpf)),completar=null;
     // já cadastrado sem CPF: reconhece pelo nome e completa o CPF
     if(!f){f=ALL.find(y=>!soDig(y.cpf)&&norm(y.nome)===norm(x.nome));if(f)completar=f.id}
-    return {...x,existe:f?f.id:null,completar,semEmp:!FUNC[x.empresa],marcado:!f&&!!FUNC[x.empresa]}});
+    // já cadastrado: completa o que falta (salário do mensalista, admissão); salário diferente só com a caixinha marcada
+    const sal=f&&f.vinc==='mensalista'?acordo(f).salario:null;
+    const faltaSal=!!f&&f.vinc==='mensalista'&&!sal&&x.salario>0,difSal=!!sal&&x.salario>0&&Math.abs(sal-x.salario)>.005;
+    return {...x,existe:f?f.id:null,completar,faltaSal,difSal,salSist:sal,faltaAdm:!!f&&!f.adm&&!!x.adm,atualizar:false,semEmp:!FUNC[x.empresa],marcado:!f&&!!FUNC[x.empresa]}});
   return {comp:d.comp,lista};
 }
 const funcaoDe=n=>Object.keys(DIARIAS).find(k=>norm(k)===norm(n));
+const aCompletar=x=>x.completar||x.faltaSal||x.faltaAdm||(x.difSal&&x.atualizar);
+function impLabel(){
+  const l=S.imp.lista,n=l.filter(x=>!x.existe&&!x.semEmp&&x.marcado).length,c=l.filter(x=>x.existe&&aCompletar(x)).length;
+  return {txt:[n?`Importar ${n} funcionário(s)`:'',c?`${n?'e completar':'Completar'} ${c} cadastro(s)`:''].filter(Boolean).join(' ')||'Nada a importar',ok:n+c>0};
+}
 function renderImport(){
   const I=S.imp,novos=I.lista.filter(x=>!x.existe&&!x.semEmp),ja=I.lista.filter(x=>x.existe),comp=I.lista.filter(x=>x.completar),sem=I.lista.filter(x=>x.semEmp);
-  const marc=novos.filter(x=>x.marcado).length,novasF=[...new Set(novos.filter(x=>!funcaoDe(x.funcao)).map(x=>x.funcao))];
+  const marc=novos.filter(x=>x.marcado).length,novasF=[...new Set(novos.filter(x=>!funcaoDe(x.funcao)).map(x=>x.funcao))],lb=impLabel();
+  const jaInfo=x=>{const f=byId(x.existe),it=[];
+    if(x.completar)it.push('CPF será completado');if(x.faltaAdm)it.push(`admissão ${esc(x.adm)} será preenchida`);
+    if(x.faltaSal)it.push(`salário ${brl(x.salario)} será preenchido`);
+    if(f.vinc!=='mensalista')it.push('no sistema está como avulso: o salário não foi preenchido. Se já foi registrado, use "Registrar como mensalista" na ficha');
+    return it.join(' · ')||(x.difSal?'':'nada a completar')};
   return `<div class="cad-form" style="margin-top:0"><h3 class="sub" style="margin-top:0">Importar da folha de ${compLabel(I.comp)}</h3>
-    <p class="hint" style="margin:0">${novos.length} funcionário(s) novo(s) e ${ja.length} já cadastrado(s)${comp.length?`, dos quais ${comp.length} terão o CPF completado`:''}. Os já cadastrados não mudam.</p>
+    <p class="hint" style="margin:0">${novos.length} funcionário(s) novo(s) e ${ja.length} já cadastrado(s). Nos já cadastrados, só é completado o que falta (veja a lista no fim).</p>
     <p class="hint" style="margin:0">Os novos entram como <b>mensalistas</b>, com o salário da folha e sem benefícios, na obra <b>"A DEFINIR"</b> da empresa. Depois, troque a obra no ponto e preencha o acordo na ficha de cada um.${novasF.length?` Funções que serão criadas (sem diária de avulso): ${novasF.map(esc).join(', ')}.`:''}</p>
     ${sem.length?`<p class="err" style="margin:0">${sem.length} funcionário(s) de empresa não cadastrada no sistema ficam de fora.</p>`:''}
-    <div class="actions"><button class="btn primary" type="button" data-impok="1" ${marc?'':'disabled'}>Importar ${marc} funcionário(s)</button><button class="btn" type="button" data-impcancel="1">Cancelar</button>
+    <div class="actions"><button class="btn primary" type="button" data-impok="1" ${lb.ok?'':'disabled'}>${lb.txt}</button><button class="btn" type="button" data-impcancel="1">Cancelar</button>
       <label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-impall="1" ${marc===novos.length&&marc?'checked':''}> Marcar todos</label></div>
     ${novos.length?`<div class="scroller"><table class="ben"><thead><tr><th></th><th style="text-align:left">Nome</th><th>Empresa</th><th style="text-align:left">Função</th><th>Admissão</th><th>Salário</th></tr></thead><tbody>
       ${I.lista.map((x,i)=>x.existe||x.semEmp?'':`<tr><td><input type="checkbox" data-impx="${i}" aria-label="Importar ${esc(x.nome)}" ${x.marcado?'checked':''}></td><td style="text-align:left;font-family:var(--f-body);white-space:normal"><b>${esc(x.nome)}</b><br><span class="hint num">${esc(x.cpf)}</span>${x.situacao==='Trabalhando'?'':` <span class="tag">${esc(x.situacao)}</span>`}</td>
         <td>${esc(x.empresa)}</td><td style="text-align:left;font-family:var(--f-body)">${esc(funcaoDe(x.funcao)||x.funcao)}${funcaoDe(x.funcao)?'':' <span class="tag">nova</span>'}</td><td class="num">${esc(x.adm)}</td><td class="num">${brl(x.salario)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Todos os funcionários do arquivo já estão cadastrados.</div>'}
-    ${ja.length?`<details><summary class="hint">Já cadastrados (${ja.length})</summary><p class="hint">${ja.map(x=>esc(x.nome)+(x.completar?' (CPF será completado)':'')).join(' · ')}</p></details>`:''}</div>`;
+    ${ja.length?`<h3 class="sub">Já cadastrados (${ja.length}): o que falta é completado com a folha</h3>
+    <div class="scroller"><table class="ben"><thead><tr><th style="text-align:left">Nome</th><th>Empresa</th><th style="text-align:left">O que acontece</th></tr></thead><tbody>
+      ${I.lista.map((x,i)=>!x.existe?'':`<tr><td style="text-align:left;font-family:var(--f-body);white-space:normal"><b>${esc(x.nome)}</b></td><td>${esc(x.empresa)}</td>
+        <td style="text-align:left;font-family:var(--f-body);white-space:normal">${jaInfo(x)}${x.difSal?`${jaInfo(x)?'<br>':''}<label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-impsal="${i}" ${x.atualizar?'checked':''}> Salário no sistema ${brl(x.salSist)}, na folha ${brl(x.salario)}: atualizar a partir de ${compLabel(COMP)}</label>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}</div>`;
 }
 function importarFolha(){
   const I=S.imp,sel=I.lista.filter(x=>!x.existe&&!x.semEmp&&x.marcado),obraDe={},criadas=[],t=Date.now();
@@ -1293,9 +1309,19 @@ function importarFolha(){
     FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};
     registrar(`Cadastro · ${x.nome}`,'—',`Importado da folha de ${compLabel(I.comp)} · ${emp} · admissão ${x.adm} · ${fn} · salário ${brl(x.salario)}`,x.situacao==='Trabalhando'?'Importação da folha':`Importação da folha · ${x.situacao}`);
   });
-  for(const x of I.lista)if(x.completar){const f=byId(x.completar);if(f&&!soDig(f.cpf)){f.cpf=fmtCpf(x.cpf);registrar(`CPF · ${f.nome}`,'—',f.cpf,'Completado pela folha')}}
+  let comp=0;
+  for(const x of I.lista){const f=x.existe&&byId(x.existe);if(!f||!aCompletar(x))continue;comp++;
+    if(x.completar&&!soDig(f.cpf)){f.cpf=fmtCpf(x.cpf);registrar(`CPF · ${f.nome}`,'—',f.cpf,'Completado pela folha')}
+    if(x.faltaAdm&&!f.adm){f.adm=x.adm;registrar(`Admissão · ${f.nome}`,'—',x.adm,'Completado pela folha')}
+    if(x.faltaSal){const a=acordo(f);
+      // o salário que faltava vale para o acordo atual e para os próximos que também estão sem salário
+      for(const y of f.acordos)if(y.desde>=a.desde&&!y.salario)y.salario=x.salario;
+      registrar(`Acordo · ${f.nome}`,'Salário não informado',`Salário ${brl(x.salario)}`,`Completado pela folha de ${compLabel(I.comp)}`)}
+    else if(x.difSal&&x.atualizar){const a=acordo(f),antes=a.salario;
+      if(a.desde===COMP)a.salario=x.salario;else{f.acordos.push({...a,salario:x.salario,desde:COMP,motivo:`Salário da folha de ${compLabel(I.comp)}`,quem:'DP'});f.acordos.sort((p,q)=>p.desde.localeCompare(q.desde))}
+      registrar(`Acordo · ${f.nome} · a partir de ${compLabel(COMP)}`,`Salário ${brl(antes)}`,`Salário ${brl(x.salario)}`,`Folha de ${compLabel(I.comp)}`)}}
   S.imp=null;S.cadSel=sel.length?'n'+t+'_0':null;render();
-  toast(`${sel.length} funcionário(s) importado(s)${criadas.length?` e ${criadas.length} função(ões) criada(s)`:''}. Eles estão na obra "A DEFINIR" da empresa.`);
+  toast([sel.length?`${sel.length} funcionário(s) importado(s)${criadas.length?` e ${criadas.length} função(ões) criada(s)`:''}; os novos estão na obra "A DEFINIR" da empresa`:'',comp?`${comp} cadastro(s) completado(s)`:''].filter(Boolean).join('. ')+'.');
 }
 function renderFuncoes(){
   const dp=S.perfil==='dp';
@@ -2116,8 +2142,9 @@ $('#view').addEventListener('change',e=>{
     const r=new FileReader();
     r.onload=()=>{try{S.imp=prepImport(JSON.parse(r.result));S.cadSel='importar';render()}catch(er){toast('Não foi possível ler o arquivo: '+er.message)}};
     r.readAsText(e.target.files[0]);return}
-  if(e.target.matches('[data-impx]')){S.imp.lista[+e.target.dataset.impx].marcado=e.target.checked;
-    const n=S.imp.lista.filter(x=>x.marcado).length,b=document.querySelector('[data-impok]');b.textContent=`Importar ${n} funcionário(s)`;b.disabled=!n;return}
+  if(e.target.matches('[data-impx],[data-impsal]')){const x=S.imp.lista[+(e.target.dataset.impx??e.target.dataset.impsal)];
+    if(e.target.dataset.impx!=null)x.marcado=e.target.checked;else x.atualizar=e.target.checked;
+    const lb=impLabel(),b=document.querySelector('[data-impok]');b.textContent=lb.txt;b.disabled=!lb.ok;return}
   if(e.target.matches('[data-impall]')){S.imp.lista.forEach(x=>{if(!x.existe&&!x.semEmp)x.marcado=e.target.checked});return render()}
   if(e.target.matches('[data-logo]')&&e.target.files[0]){
     const k=e.target.dataset.logo,file=e.target.files[0],r=new FileReader();
