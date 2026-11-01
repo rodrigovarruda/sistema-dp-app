@@ -766,7 +766,7 @@ function renderEmpresas(){
       <div class="field"><label for="eCct${k}">Convenção coletiva (para o recibo da cesta)</label><input type="text" id="eCct${k}" name="cct" value="${esc(E.cct||'2025/2026')}" placeholder="2025/2026" ${dp?'':'disabled'}></div>
       <div class="field"><label for="eEnc${k}">Encargos sobre salário (%) — custo da obra</label><input type="text" inputmode="decimal" id="eEnc${k}" name="encargos" value="${E.encargos?nfmt(E.encargos):''}" placeholder="0" ${dp?'':'disabled'}></div>
       <div class="field"><label for="eContas${k}">Contas bancárias do salário (separe por vírgula; "Espécie" já vem sempre)</label><input type="text" id="eContas${k}" name="contas" value="${esc(contasBanco(k).join(', '))}" placeholder="Ex.: CEF MIDWAY, BB UFRN" ${dp?'':'disabled'}></div>
-      <div class="field"><label for="eCid${k}">Cidade/UF</label><input type="text" id="eCid${k}" name="cidade" value="${esc(E.cidade)}" placeholder="Ex.: Belo Horizonte/MG" ${dp?'':'disabled'}></div>
+      <div class="field"><label for="eCid${k}">Cidade/UF</label><input type="text" id="eCid${k}" name="cidade" value="${esc(E.cidade)}" placeholder="Ex.: Natal/RN" ${dp?'':'disabled'}></div>
       <div class="field"><label for="eLogo${k}">Logomarca (imagem)</label><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${E.logo?`<img class="logo-img" src="${E.logo}" alt="Logomarca atual">`:'<span class="hint">Sem logomarca</span>'}
         ${dp?`<input type="file" id="eLogo${k}" accept="image/*" data-logo="${k}">${E.logo?`<button class="btn" type="button" data-logodel="${k}">Remover</button>`:''}`:''}</div></div>
       <div class="err" id="eErr${k}"></div>
@@ -1378,7 +1378,7 @@ function renderObras(){
        <div class="field"><label for="oNome">Nome da obra</label><input type="text" id="oNome" name="nome" value="${v('nome')}" placeholder="Ex.: Condomínio Jardim das Águas"></div>
        <div class="field"><label for="oEmp">Empresa</label><select id="oEmp" name="empresa">${Object.keys(FUNC).map(x=>`<option ${x===(o.empresa||S.empresa)?'selected':''}>${x}</option>`).join('')}</select></div>
        <div class="field"><label for="oCid">Cidade</label><input type="text" id="oCid" name="cidade" value="${v('cidade')}"></div>
-       <div class="field"><label for="oUf">UF</label><input type="text" id="oUf" name="uf" maxlength="2" value="${v('uf')||'MG'}"></div>
+       <div class="field"><label for="oUf">UF</label><input type="text" id="oUf" name="uf" maxlength="2" value="${v('uf')||'RN'}"></div>
        <div class="field"><label for="oResp">Responsável (gestor da obra)</label><input type="text" id="oResp" name="resp" value="${v('resp')}"></div>
        <div class="field"><label for="oIni">Início</label><input type="text" id="oIni" name="inicio" data-date="1" inputmode="numeric" value="${v('inicio')}" placeholder="DD/MM/AAAA"></div>
        <div class="field"><label for="oFim">Previsão de término</label><input type="text" id="oFim" name="fim" data-date="1" inputmode="numeric" value="${v('fim')}" placeholder="DD/MM/AAAA"></div>
