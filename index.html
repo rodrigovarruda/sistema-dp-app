@@ -2338,7 +2338,10 @@ async function nuvemIniciar(){
   try{const {data:{session}}=await NV.cli.auth.getSession();if(session)nvEntrou(session);else nvTelaLogin()}
   catch(e){nvTelaLogin()}
 }
-carregarLocal();
+if(!carregarLocal()){
+  try{const r=JSON.parse(localStorage.getItem('sistemaDP.previa.v1')||'null');if(r&&r.EMPRESAS)repl(EMPRESAS,r.EMPRESAS);if(r&&r.CESTAS)repl(CESTAS,r.CESTAS)}catch(e){}
+  zerar(2026,9);
+}
 {const t=location.hash.slice(1);if(['salarios','custo','empresas','funcoes','obras','funcionarios','planilha','calendario','beneficios','fechamento'].includes(t))S.tab=t}
 render();
 nuvemIniciar();
