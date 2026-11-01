@@ -74,12 +74,14 @@ nav.tabs button[aria-selected=true]{color:var(--brand);border-bottom-color:var(-
 
 /* Planilha */
 .scroller{overflow-x:auto}
+/* planilha com rolagem própria do tamanho da tela: o cabeçalho dos dias e a coluna dos nomes ficam sempre à vista */
+.plan-scroll{overflow:auto;max-height:calc(100vh - 16px)}
 table.grid{border-collapse:separate;border-spacing:0;font-size:12px}
 table.grid th,table.grid td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0;text-align:center}
-table.grid thead th{position:sticky;top:0;background:var(--surface-2);font-weight:600;padding:4px 0;min-width:80px}
+table.grid thead th{position:sticky;top:0;z-index:4;background:var(--surface-2);font-weight:600;padding:4px 0;min-width:80px}
 table.grid thead th .wd{display:block;font-size:10px;color:var(--muted);font-weight:500}
 table.grid .name{position:sticky;left:0;z-index:2;background:var(--surface);text-align:left;padding:6px 10px;min-width:190px;max-width:190px}
-table.grid thead .name{z-index:3;background:var(--surface-2)}
+table.grid thead .name{z-index:5;background:var(--surface-2)}
 /* mês inteiro na tela: colunas estreitas com a sigla da obra */
 table.grid.compacta{width:100%;min-width:1000px;table-layout:fixed}
 table.grid.compacta thead th{min-width:0;font-size:11px}
@@ -941,7 +943,7 @@ function renderPlanilha(){
       <label class="ac-chk" style="font-weight:500"><input type="checkbox" name="at" ${S.faltasAT?'checked':''}> Incluir atestados (AT)</label>
       <button class="btn primary" type="submit">Gerar relatório</button><button class="btn" type="button" data-faltasfechar="1">Fechar</button></form>`:''}`;
   if(!fs.length){$('#view').innerHTML=h+`<div class="empty">${S.planObra?'Nenhum funcionário lotado ou com dia trabalhado nesta obra no mês.':'Nenhum funcionário no seu escopo.'}</div></section>`;return}
-  h+=`<div class="scroller"><table class="grid${S.planNomes?'':' compacta'}"><thead><tr><th class="name">Funcionário</th>`;
+  h+=`<div class="scroller plan-scroll" id="planScroll"><table class="grid${S.planNomes?'':' compacta'}"><thead><tr><th class="name">Funcionário</th>`;
   for(let d=1;d<=NDIAS;d++)h+=`<th class="${isWE(d)||FERIADOS_AGO[d]?'we':''} num" ${FERIADOS_AGO[d]?`title="Feriado: ${FERIADOS_AGO[d]}"`:''}>${d}<span class="wd">${FERIADOS_AGO[d]?'FER':WD[dow(d)]}</span></th>`;
   h+=`<th>Dias trab.</th></tr></thead><tbody>`;
   for(const f of fs){
@@ -957,7 +959,10 @@ function renderPlanilha(){
   h+=`</tbody></table></div>${siglas}<div class="legend"><span><i class="c-P emp-CONARTE">Obra da CONARTE</i></span><span><i class="c-P emp-ENGEVAC">Obra da ENGEVAC</i></span><span><i class="c-P emp-CIENG">Obra da CIENG</i></span><span><i class="c-P">Obra não vinculada</i></span><span><i class="c-M">½ Obra</i>Meio dia</span><span><i class="c-F">F</i>Falta não justificada</span><span><i class="c-AT">AT</i>Atestado médico</span><span><i class="c-X">X</i>Sábado, domingo, feriado ou falta justificada (motivo na observação)</span>
     <span><i class="cell pend" style="width:auto;height:auto;display:inline-block;padding:1px 6px">·</i>Dia obrigatório sem lançamento</span>
     <span><i style="background:var(--accent);width:8px;height:8px;border-radius:50%;padding:0"></i>Nome de obra a vincular</span></div></section>`;
+  // a planilha tem rolagem própria: mantém a posição ao lançar um dia
+  const ps=$('#planScroll'),pos=ps?[ps.scrollTop,ps.scrollLeft]:[0,0];
   $('#view').innerHTML=h;
+  if($('#planScroll'))[$('#planScroll').scrollTop,$('#planScroll').scrollLeft]=pos;
 }
 // Explica por que os dias estão travados e permite reabrir
 function travasHTML(f){
