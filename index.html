@@ -53,7 +53,7 @@ header.top{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;justif
 .ctx{display:flex;flex-wrap:wrap;gap:10px}
 .field{display:flex;flex-direction:column;gap:3px}
 .field label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
-select,input[type=text],textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-height:36px}
+select,input[type=text],input[type=search],textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-height:36px}
 textarea{resize:vertical;min-height:60px;width:100%}
 
 .status-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
@@ -208,7 +208,9 @@ h3.sub{font-size:18px;margin:14px 0 4px}
 
 /* Funcionários e acordo */
 .cad{display:grid;grid-template-columns:250px minmax(0,1fr);gap:18px;padding:14px}
-.cad-list{display:flex;flex-direction:column;gap:6px}
+.cad-list{display:flex;flex-direction:column;gap:6px;position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px)}
+.cad-itens{display:flex;flex-direction:column;gap:6px;overflow-y:auto;min-height:0;flex:1;padding-right:2px}
+.cad-busca{width:100%}
 .cad-item{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:1px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;cursor:pointer}
 .cad-item[aria-current=true]{border-color:var(--brand);box-shadow:inset 3px 0 0 var(--brand);background:var(--surface-2)}
 .cad-main{min-width:0}
@@ -225,7 +227,7 @@ h3.sub{font-size:18px;margin:14px 0 4px}
 .ac-val{display:flex;gap:6px;align-items:center}
 .ac-val select{min-height:32px;padding:4px 6px;font-size:12px}
 .ac-val input{width:110px;text-align:right;font-family:var(--f-data)}
-@media (max-width:820px){.cad{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:820px){.cad{grid-template-columns:minmax(0,1fr)}.cad-list{position:static;max-height:none}.cad-itens{max-height:45vh}}
 @media (max-width:820px){.cal-side,.close-grid{grid-template-columns:minmax(0,1fr)}.brand h1{font-size:26px}}
 @media (max-width:480px){.day{min-height:62px;padding:4px}.day .ob{display:none}table.grid .name{min-width:140px;max-width:140px}}
 .teste-alerta,.teste-info{margin:12px 14px 0;padding:10px 12px;border-radius:8px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
@@ -1173,7 +1175,9 @@ function renderCad(){
   if(S.cadSel!=='novo'&&S.cadSel!=='importar'&&!fs.find(f=>f.id===S.cadSel))S.cadSel=fs[0]?.id;
   let h=`<section class="panel"><div class="panel-head"><h2>Funcionários · ${nomeEmp()}</h2><span class="hint">${dp?'O acordo de cada funcionário define o que ele recebe e quanto.':'Somente o DP cadastra funcionários e altera acordos.'}</span></div><div class="cad"><div class="cad-list">
     ${dp?`<button class="btn primary" data-cadnovo="1">+ Cadastrar funcionário</button><button class="btn" data-impfolha="1">Importar da folha</button><input type="file" id="impFile" accept=".json,application/json" hidden data-impfile="1">`:''}
-    ${fs.map(f=>`<button class="cad-item" data-cad="${f.id}" aria-current="${S.cadSel===f.id}"><b>${esc(f.nome)}${selo(f)}</b><span class="hint">${esc(f.funcao)} · ${vincCurto(f)}</span></button>`).join('')}</div><div class="cad-main">`;
+    <input type="search" id="cadBusca" class="cad-busca" placeholder="Buscar por nome ou CPF" aria-label="Buscar funcionário por nome ou CPF" value="${esc(S.cadBusca||'')}">
+    <div class="cad-itens" id="cadItens">${fs.map(f=>`<button class="cad-item" data-cad="${f.id}" data-busca="${esc(norm(f.nome)+' '+soDig(f.cpf))}" aria-current="${S.cadSel===f.id}" ${cadAchou(f)?'':'hidden'}><b>${esc(f.nome)}${selo(f)}</b><span class="hint">${esc(f.funcao)} · ${vincCurto(f)}</span></button>`).join('')}
+    <p class="hint" id="cadNada" ${fs.some(cadAchou)?'hidden':''}>Ninguém encontrado.</p></div></div><div class="cad-main">`;
   if(S.cadSel==='novo'){
     h+=`<form id="novoForm" class="cad-form"><h3 class="sub" style="margin-top:0">Novo funcionário</h3>
       <div class="form-grid">
@@ -1248,8 +1252,13 @@ function renderCad(){
         ${f.acordos.slice().reverse().map(a=>`<tr><td>${compLabel(a.desde)}</td>${VERBAS.map(([k])=>{const v=k==='tarifa'?a.tarifa:a.ben[k];return `<td>${v==null?'—':brl(v)+(a.pg?.[k]?'<br><span class="hint">'+PG[a.pg[k]]+'</span>':'')}</td>`}).join('')}<td style="text-align:left;font-family:var(--f-body)">${esc(a.motivo)} · ${esc(a.quem)}</td></tr>`).join('')}</tbody></table></div>`;
     }
   }
+  // a lista tem rolagem própria: mantém a posição ao trocar de funcionário
+  const sc=$('#cadItens')?.scrollTop||0;
   $('#view').innerHTML=h+`</div></div></section>`;
+  if($('#cadItens'))$('#cadItens').scrollTop=sc;
 }
+// busca na lista de funcionários: por nome (sem acentos) ou pelos números do CPF
+const cadAchou=(f,q=S.cadBusca)=>{q=(q||'').trim();if(!q)return true;const d=soDig(q);return norm(f.nome).includes(norm(q))||(d.length>=3&&soDig(f.cpf).includes(d))};
 // Importação da folha: arquivo .json gerado a partir do PDF da contabilidade (nome, CPF, admissão, cargo, salário)
 function prepImport(d){
   if(d?.tipo!=='sistemaDP.folha'||!Array.isArray(d.funcionarios))throw new Error('o arquivo não é uma lista de funcionários da folha');
@@ -2065,7 +2074,10 @@ $('#view').addEventListener('click',e=>{
   if(e.target.closest('[data-impok]'))return importarFolha();
   if(e.target.closest('[data-impcancel]')){S.imp=null;S.cadSel=null;return render()}
   const cs=e.target.closest('[data-cad],[data-cadnovo],[data-cadedit],[data-cadcancel]');
-  if(cs){S.vincEdit=false;if(cs.dataset.cadnovo)S.cadSel='novo';else if(cs.dataset.cadedit)S.cadEdit=true;else if(cs.dataset.cadcancel)S.cadEdit=false;else{S.cadSel=cs.dataset.cad;S.cadEdit=false}return render()}
+  if(cs){S.vincEdit=false;if(cs.dataset.cadnovo)S.cadSel='novo';else if(cs.dataset.cadedit)S.cadEdit=true;else if(cs.dataset.cadcancel)S.cadEdit=false;else{S.cadSel=cs.dataset.cad;S.cadEdit=false}render();
+    // escolheu na lista: se a ficha ficou fora da tela (página rolada ou celular), leva até ela
+    if(cs.classList.contains('cad-item')||cs.dataset.cadnovo){const m=$('.cad-main'),y=m?.getBoundingClientRect().top;if(m&&(y<0||y>innerHeight*.6))m.scrollIntoView({block:'start'})}
+    return}
   if(e.target.closest('[data-rseltodos]')){const cs=[...document.querySelectorAll('.rsel')],marcar=cs.some(c=>!c.checked);cs.forEach(c=>c.checked=marcar);return}
   const rsi=e.target.closest('[data-rselimp]');
   if(rsi){const f=byId(rsi.dataset.rselimp),tipos=[...document.querySelectorAll('.rsel:checked')].flatMap(c=>c.value.split(','));
@@ -2103,6 +2115,9 @@ $('#view').addEventListener('click',e=>{
 $('#view').addEventListener('keydown',e=>{const r=e.target.closest('[data-exp]');if(r&&(e.key==='Enter'||e.key===' ')){e.preventDefault();r.click()}});
 $('#view').addEventListener('input',e=>{
   const t=e.target;
+  if(t.id==='cadBusca'){S.cadBusca=t.value;let n=0;
+    document.querySelectorAll('#cadItens .cad-item').forEach(b=>{const f=byId(b.dataset.cad),ok=!!f&&cadAchou(f);b.hidden=!ok;if(ok)n++});
+    $('#cadNada').hidden=n>0;return}
   if(t.matches&&t.matches('[data-cnpj]')){t.value=fmtCnpj(t.value);return}
   if(t.matches&&t.matches('[data-alelo]')){const id=t.dataset.alelo,e2=$('#aleloEsp-'+id),tot=+e2.dataset.total,
     soma=(parseBRL($('#aleloAlim-'+id).value||'0')||0)+(parseBRL($('#aleloLivre-'+id).value||'0')||0)+(parseBRL($('#aleloNatal-'+id)?.value||'0')||0);
