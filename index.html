@@ -1167,8 +1167,11 @@ function acordoResumo(a){
     return `<div class="ac-card ${v==null?'off':''}"><span class="hint">${l}</span><b class="num">${v==null?'Sem direito':brl(v)}</b><span class="hint">${v==null?'':u}</span>${v!=null&&a.pg?.[k]?`<span class="tag">${PG[a.pg[k]]}</span>`:''}${k==='ajuda'&&v!=null&&a.ajudaFixa?'<span class="tag">Fixa: não desconta faltas</span>':''}</div>`}).join('');
 }
 // Obras de contratação de uma empresa (só as em andamento); a escolhida vem marcada
-const opcoesObraEmp=(emp,sel)=>{const os=Object.entries(OBRAS).filter(([,o])=>o.empresa===emp&&o.status!=='Concluída').sort((a,b)=>a[1].nome.localeCompare(b[1].nome));
-  return os.length?os.map(([k,o])=>`<option value="${k}" ${k===sel?'selected':''}>${esc(o.nome)}</option>`).join(''):`<option value="">Nenhuma obra da ${emp} cadastrada (aba Obras)</option>`};
+// as de outras empresas vêm depois, num grupo próprio: o funcionário pode ser registrado numa empresa e contratado para obra de outra
+const opcoesObraEmp=(emp,sel)=>{const os=Object.entries(OBRAS).filter(([k,o])=>o.status!=='Concluída'||k===sel).sort((a,b)=>a[1].nome.localeCompare(b[1].nome));
+  const op=([k,o],outra)=>`<option value="${k}" ${k===sel?'selected':''}>${esc(o.nome)}${outra?' · '+esc(o.empresa):''}</option>`;
+  const mesma=os.filter(([,o])=>o.empresa===emp),outras=os.filter(([,o])=>o.empresa!==emp);
+  return os.length?mesma.map(x=>op(x)).join('')+(outras.length?`<optgroup label="Obras de outras empresas">${outras.map(x=>op(x,true)).join('')}</optgroup>`:''):`<option value="">Nenhuma obra cadastrada (aba Obras)</option>`};
 function renderCad(){
   const fs=visiveis(),dp=S.perfil==='dp';
   if(S.cadSel==='importar'&&!S.imp)S.cadSel=null;
@@ -1205,7 +1208,7 @@ function renderCad(){
       h+=`<div class="ficha-top"><h3 class="sub" style="margin:0">${esc(f.nome)}</h3><span style="display:flex;gap:6px;flex-wrap:wrap">${dp&&S.dadosEdit!==f.id?`<button class="btn" data-dadosedit="${f.id}">Corrigir dados</button>`:''}${dp&&!S.vincEdit&&!S.fechF[f.id]?`<button class="btn primary" data-vincedit="1">${f.vinc==='avulso'?'Registrar como mensalista':'Mudar para avulso'}</button>`:''}</span></div>
        <dl class="facts facts-grid"><div><dt>Função</dt><dd>${esc(f.funcao)}</dd></div><div><dt>Vínculo</dt><dd>${vincLongo(f)}${temAvulso(f)?' · diária de '+brl(f.diaria||DIARIAS[f.funcao]):''}</dd></div>
        <div><dt>Obra atual</dt><dd>${f.lot.map(l=>OBRAS[l.obra].nome+(l.de>1?` (desde ${dd(l.de)})`:'')).join(' → ')}</dd></div><div><dt>CPF</dt><dd class="num">${f.cpf?esc(f.cpf):(S.perfil==='dp'?`<span style="color:var(--bad)">Não cadastrado</span><br><button class="link-btn" data-cpfedit="${f.id}">Cadastrar CPF</button>`:cpfTxt(f))}</dd></div>
-       ${f.contrat?.vinc==='avulso'?`<div><dt>Início do período de teste</dt><dd class="num">${f.adm}</dd></div><div><dt>Admissão (registro)</dt><dd class="num">${admissaoTxt(f)}</dd></div>`:`<div><dt>Admissão</dt><dd class="num">${f.adm}</dd></div>`}<div><dt>Obra de contratação</dt><dd>${esc(OBRAS[f.contrat.obra].nome)} · ${esc(f.contrat.empresa)}</dd></div></dl>
+       ${f.contrat?.vinc==='avulso'?`<div><dt>Início do período de teste</dt><dd class="num">${f.adm}</dd></div><div><dt>Admissão (registro)</dt><dd class="num">${admissaoTxt(f)}</dd></div>`:`<div><dt>Admissão</dt><dd class="num">${f.adm}</dd></div>`}<div><dt>Obra de contratação</dt><dd>${esc(OBRAS[f.contrat.obra].nome)} · ${OBRAS[f.contrat.obra].empresa!==empresaDe(f)?`obra da ${esc(OBRAS[f.contrat.obra].empresa)}, registrado na ${esc(empresaDe(f))}`:esc(f.contrat.empresa)}</dd></div></dl>
        ${dp&&S.dadosEdit===f.id?`<form id="dadosForm" class="cad-form"><h3 class="sub" style="margin-top:0">Corrigir dados de ${esc(f.nome)}</h3>
          <p class="hint" style="margin:0">Use para corrigir erros de cadastro. A alteração fica registrada no histórico, com o motivo.</p>
          <div class="form-grid">
