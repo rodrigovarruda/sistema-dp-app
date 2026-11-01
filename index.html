@@ -213,6 +213,11 @@ h3.sub{font-size:18px;margin:14px 0 4px}
 .cad-list{display:flex;flex-direction:column;gap:6px;position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px)}
 .cad-itens{display:flex;flex-direction:column;gap:6px;overflow-y:auto;min-height:0;flex:1;padding-right:2px}
 .cad-busca{width:100%}
+.lemb-lista{display:flex;flex-direction:column;gap:6px}
+.lemb{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)}
+.lemb.perto{background:var(--warn-bg);border-color:transparent}
+.lemb-form{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px}
+button.chip{cursor:pointer}
 .cad-item{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:1px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;cursor:pointer}
 .cad-item[aria-current=true]{border-color:var(--brand);box-shadow:inset 3px 0 0 var(--brand);background:var(--surface-2)}
 .cad-main{min-width:0}
@@ -910,6 +915,7 @@ function trocarComp(k){
   render();toast(t?`Competência ${MES_NOME}.`:`Novo mês aberto: ${MES_NOME}. Cadastros e acordos continuam; o ponto começa vazio.`);
 }
 document.getElementById('selComp').addEventListener('change',e=>trocarComp(e.target.value));
+document.getElementById('statusBar').addEventListener('click',e=>{if(e.target.closest('[data-golemb]')){S.tab='funcionarios';S.cadSel='lembretes';render();$('#view').scrollIntoView({block:'start'})}});
 function renderStatus(){
   renderCompSel();
   const pe=pendencias().length,nv=naoVinculadas().length,dv=divergAV().length;
@@ -919,6 +925,7 @@ function renderStatus(){
    ${dv?`<span class="chip warn">${dv} avulso(s) com dias trabalhados ≠ diárias</span>`:''}
    ${(()=>{const n=funcsEmp().filter(f=>S.fechF[f.id]).length;return n?`<span class="chip ok">${n} de ${funcsEmp().length} funcionários fechados</span>`:''})()}
    ${(()=>{const n=funcsEmp().filter(noLimite).length;return n?`<span class="chip bad">${n} funcionário(s) no limite do período de teste: registrar</span>`:''})()}
+   ${(()=>{const n=S.perfil==='dp'?lembAvisar(funcsEmp()).length:0;return n?`<button class="chip warn" data-golemb="1" title="Ver os lembretes do acordo">${n} lembrete(s) de acordo para revisar</button>`:''})()}
    ${S.perfil==='gestor'?'<span class="chip">Vendo só a equipe lotada no Residencial Ipê</span>':''}`;
 }
 function cellHTML(f,d){
@@ -1180,9 +1187,10 @@ const opcoesObraEmp=(emp,sel)=>{const os=Object.entries(OBRAS).filter(([k,o])=>o
 function renderCad(){
   const fs=visiveis(),dp=S.perfil==='dp';
   if(S.cadSel==='importar'&&!S.imp)S.cadSel=null;
-  if(S.cadSel!=='novo'&&S.cadSel!=='importar'&&!fs.find(f=>f.id===S.cadSel))S.cadSel=fs[0]?.id;
+  if(!['novo','importar','lembretes'].includes(S.cadSel)&&!fs.find(f=>f.id===S.cadSel))S.cadSel=fs[0]?.id;
+  const nLemb=lembAbertos(fs).length;
   let h=`<section class="panel"><div class="panel-head"><h2>Funcionários · ${nomeEmp()}</h2><span class="hint">${dp?'O acordo de cada funcionário define o que ele recebe e quanto.':'Somente o DP cadastra funcionários e altera acordos.'}</span></div><div class="cad"><div class="cad-list">
-    ${dp?`<button class="btn primary" data-cadnovo="1">+ Cadastrar funcionário</button><button class="btn" data-impfolha="1">Importar da folha</button><input type="file" id="impFile" accept=".json,application/json" hidden data-impfile="1">`:''}
+    ${dp?`<button class="btn primary" data-cadnovo="1">+ Cadastrar funcionário</button><button class="btn" data-impfolha="1">Importar da folha</button>${nLemb?`<button class="btn" data-cad="lembretes">Lembretes (${nLemb})</button>`:''}<input type="file" id="impFile" accept=".json,application/json" hidden data-impfile="1">`:''}
     <input type="search" id="cadBusca" class="cad-busca" placeholder="Buscar por nome ou CPF" aria-label="Buscar funcionário por nome ou CPF" value="${esc(S.cadBusca||'')}">
     <div class="cad-itens" id="cadItens">${fs.map(f=>`<button class="cad-item" data-cad="${f.id}" data-busca="${esc(norm(f.nome)+' '+soDig(f.cpf))}" aria-current="${S.cadSel===f.id}" ${cadAchou(f)?'':'hidden'}><b>${esc(f.nome)}${selo(f)}</b><span class="hint">${esc(f.funcao)} · ${vincCurto(f)}</span></button>`).join('')}
     <p class="hint" id="cadNada" ${fs.some(cadAchou)?'hidden':''}>Ninguém encontrado.</p></div></div><div class="cad-main">`;
@@ -1205,6 +1213,8 @@ function renderCad(){
       <div class="actions"><button class="btn primary" type="submit">Cadastrar</button><button class="btn" type="button" data-cad="${fs[0]?.id||''}">Cancelar</button></div></form>`;
   } else if(S.cadSel==='importar'){
     h+=renderImport();
+  } else if(S.cadSel==='lembretes'){
+    h+=renderLembretes();
   } else {
     const f=byId(S.cadSel);
     if(!f){h+=`<div class="empty">Nenhum funcionário no seu escopo.</div>`}
@@ -1238,6 +1248,7 @@ function renderCad(){
        <div class="ac-card off"><span class="hint">Passagem e alimentação</span><b>Incluídas na diária</b></div></div>
        <p class="hint">O valor vem da tabela de diárias por função. O preço de cada diária fica guardado, mesmo que a tabela mude depois.</p>`:`<h3 class="sub">Acordo vigente em ${MES_NOME}</h3><p class="hint" style="margin:0 0 8px">Vale a partir de ${compLabel(A.desde)} · ${esc(A.motivo)}</p>
        <div class="ac-cards">${acordoResumo(A)}</div>`}`;
+      h+=lembretesHTML(f);
       if(dp&&S.vincEdit){
         const novo=f.vinc==='avulso'?'mensalista':'avulso';
         h+=`<form id="vincForm" class="cad-form"><h3 class="sub" style="margin-top:0">${novo==='mensalista'?'Registrar como mensalista':'Passar para avulso'}</h3>
@@ -1264,6 +1275,34 @@ function renderCad(){
   const sc=$('#cadItens')?.scrollTop||0;
   $('#view').innerHTML=h+`</div></div></section>`;
   if($('#cadItens'))$('#cadItens').scrollTop=sc;
+}
+// Lembretes do acordo: data e texto para não esquecer uma mudança futura (ex.: fim da experiência).
+// Aparecem no topo a partir de LEMB_ANTES dias antes da data, até o DP marcar "Feito".
+const LEMB_ANTES=7;
+const diasAte=data=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(data||'');if(!m)return null;const d=new Date(+m[3],+m[2]-1,+m[1]);if(d.getDate()!==+m[1]||d.getMonth()!==+m[2]-1)return null;
+  const h=new Date();h.setHours(0,0,0,0);return Math.round((d-h)/864e5)};
+const lembAbertos=fs=>fs.flatMap(f=>(f.lembretes||[]).filter(l=>!l.feito).map(l=>({f,l,d:diasAte(l.data)}))).sort((a,b)=>a.d-b.d);
+const lembAvisar=fs=>lembAbertos(fs).filter(x=>x.d<=LEMB_ANTES);
+const lembQuando=d=>d<0?`venceu há ${-d} dia(s)`:d===0?'é hoje':`daqui a ${d} dia(s)`;
+function lembretesHTML(f){
+  const dp=S.perfil==='dp',ls=f.lembretes||[],ab=ls.filter(l=>!l.feito).sort((a,b)=>diasAte(a.data)-diasAte(b.data)),ok=ls.filter(l=>l.feito);
+  let h=`<h3 class="sub">Lembretes do acordo</h3>`;
+  h+=ab.length?`<div class="lemb-lista">${ab.map(l=>{const d=diasAte(l.data);return `<div class="lemb ${d<=LEMB_ANTES?'perto':''}"><span><b class="num">${esc(l.data)}</b> · ${esc(l.txt)} <span class="tag">${lembQuando(d)}</span></span>
+      ${dp?`<span style="display:flex;gap:6px"><button class="btn" data-lembok="${f.id}:${l.id}">Feito</button><button class="btn" data-lembdel="${f.id}:${l.id}">Apagar</button></span>`:''}</div>`}).join('')}</div>`
+    :`<p class="hint" style="margin:0">Nenhum lembrete pendente.</p>`;
+  if(dp)h+=`<form id="lembForm" class="lemb-form"><div class="field"><label for="lbData">Data</label><input type="text" id="lbData" name="data" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA"></div>
+      <div class="field" style="flex:1"><label for="lbTxt">Lembrar de</label><input type="text" id="lbTxt" name="txt" placeholder="Ex.: fim da experiência: rever salário e ajuda de custo"></div>
+      <button class="btn" type="submit">Adicionar lembrete</button><div id="formErr" class="err" style="flex-basis:100%"></div></form>
+    <p class="hint" style="margin:4px 0 0">O lembrete aparece no topo do sistema ${LEMB_ANTES} dias antes da data. A mudança em si é feita em "Alterar acordo".</p>`;
+  if(ok.length)h+=`<details><summary class="hint">Lembretes concluídos (${ok.length})</summary><p class="hint">${ok.map(l=>`${esc(l.data)} · ${esc(l.txt)} (feito em ${esc(l.feito)})`).join('<br>')}</p></details>`;
+  return h;
+}
+function renderLembretes(){
+  const xs=lembAbertos(visiveis());
+  return `<div class="cad-form" style="margin-top:0"><h3 class="sub" style="margin-top:0">Lembretes do acordo</h3>
+    <p class="hint" style="margin:0">Todos os lembretes pendentes, do mais urgente para o mais distante. Os que vencem em até ${LEMB_ANTES} dias aparecem no topo do sistema.</p>
+    ${xs.length?`<div class="lemb-lista">${xs.map(({f,l,d})=>`<div class="lemb ${d<=LEMB_ANTES?'perto':''}"><span><b>${esc(f.nome)}</b>${selo(f)}<br><b class="num">${esc(l.data)}</b> · ${esc(l.txt)} <span class="tag">${lembQuando(d)}</span></span>
+      <button class="btn" data-cad="${f.id}">Abrir ficha</button></div>`).join('')}</div>`:'<div class="empty">Nenhum lembrete pendente.</div>'}</div>`;
 }
 // busca na lista de funcionários: por nome (sem acentos) ou pelos números do CPF
 const cadAchou=(f,q=S.cadBusca)=>{q=(q||'').trim();if(!q)return true;const d=soDig(q);return norm(f.nome).includes(norm(q))||(d.length>=3&&soDig(f.cpf).includes(d))};
@@ -1414,6 +1453,13 @@ function registrar(onde,antes,depois,just){
 const resumoTxt=a=>VERBAS.filter(([k])=>(k==='tarifa'?a.tarifa:a.ben[k])!=null).map(([k,l])=>l.split(' (')[0]+' '+brl(k==='tarifa'?a.tarifa:a.ben[k])).join(', ')||'nenhuma verba';
 $('#view').addEventListener('submit',e=>{
   e.preventDefault();const fm=e.target,err=m=>{fm.querySelector('#formErr').textContent=m};
+  if(fm.id==='lembForm'){
+    const f=byId(S.cadSel),data=fm.data.value.trim(),txt=fm.txt.value.trim().replace(/\s+/g,' ');
+    if(diasAte(data)==null)return err('Informe a data no formato DD/MM/AAAA.');
+    if(txt.length<4)return err('Escreva do que é o lembrete.');
+    (f.lembretes=f.lembretes||[]).push({id:'l'+Date.now(),data,txt,criado:new Date().toLocaleDateString('pt-BR'),quem:'DP',feito:null});
+    registrar(`Lembrete · ${f.nome}`,'—',`${data} · ${txt}`,'Lembrete do acordo');
+    render();return toast(`Lembrete salvo. Ele aparece no topo a partir de ${LEMB_ANTES} dias antes de ${data}.`)}
   if(fm.classList.contains('emp-form')){
     const k=fm.dataset.emp,E=EMPRESAS[k],er=fm.querySelector('.err');
     const razao=fm.razao.value.trim(),cnpj=fm.cnpj.value.trim();
@@ -2078,6 +2124,10 @@ $('#view').addEventListener('click',e=>{
   if(gv){S.tab='funcionarios';S.cadSel=gv.dataset.govinc;S.vincEdit=true;S.cadEdit=false;render();$('#vincForm')?.scrollIntoView({block:'center'});return}
   const vb=e.target.closest('[data-vincedit],[data-vinccancel]');
   if(vb){S.vincEdit=!!vb.dataset.vincedit;S.cadEdit=false;render();if(S.vincEdit)$('#vincForm')?.scrollIntoView({block:'center'});return}
+  const lb=e.target.closest('[data-lembok],[data-lembdel]');
+  if(lb){const [id,lid]=(lb.dataset.lembok||lb.dataset.lembdel).split(':'),f=byId(id),l=f?.lembretes?.find(x=>x.id===lid);if(!l)return;
+    if(lb.dataset.lembok){l.feito=new Date().toLocaleDateString('pt-BR');registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Feito','Lembrete do acordo concluído');render();return toast('Lembrete concluído.')}
+    f.lembretes=f.lembretes.filter(x=>x!==l);registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Apagado','Lembrete do acordo');render();return toast('Lembrete apagado.')}
   if(e.target.closest('[data-impfolha]')){$('#impFile').value='';return $('#impFile').click()}
   if(e.target.closest('[data-impok]'))return importarFolha();
   if(e.target.closest('[data-impcancel]')){S.imp=null;S.cadSel=null;return render()}
@@ -2288,10 +2338,7 @@ async function nuvemIniciar(){
   try{const {data:{session}}=await NV.cli.auth.getSession();if(session)nvEntrou(session);else nvTelaLogin()}
   catch(e){nvTelaLogin()}
 }
-if(!carregarLocal()){
-  try{const r=JSON.parse(localStorage.getItem('sistemaDP.previa.v1')||'null');if(r&&r.EMPRESAS)repl(EMPRESAS,r.EMPRESAS);if(r&&r.CESTAS)repl(CESTAS,r.CESTAS)}catch(e){}
-  zerar(2026,9);
-}
+carregarLocal();
 {const t=location.hash.slice(1);if(['salarios','custo','empresas','funcoes','obras','funcionarios','planilha','calendario','beneficios','fechamento'].includes(t))S.tab=t}
 render();
 nuvemIniciar();
