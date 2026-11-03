@@ -660,6 +660,9 @@ function calc(f){
   if(temAvulso(f)&&avDias>0){const per=f.vh.length>1?` · período como avulso: ${f.vh.filter(x=>x.vinc==='avulso').map(x=>{const i=f.vh.indexOf(x),fim=f.vh[i+1]?f.vh[i+1].de-1:NDIAS;return dd(x.de)+' a '+dd(fim)}).join(', ')}`:'';
     r.itens.diarias={bruto:f.diaria*avDias,valor:f.diaria*avDias,f:`${nfmt(avDias)} dia(s) de serviço avulso no ponto × ${brl(f.diaria)} (${f.funcao})${per}`}}
   r.avDias=avDias;
+  // funcionário já fechado: valem os valores gravados no fechamento (o que foi pago), mesmo que a regra de cálculo mude depois
+  const fg=S.fechF[f.id]?.itens;
+  if(fg)for(const k in r.itens)if(k in fg&&Math.abs(fg[k]-r.itens[k].valor)>.004){r.itens[k].valor=fg[k];r.itens[k].natal=false;r.itens[k].gravado=true}
   if(f.vh.length>1&&f.vinc==='mensalista'){const a=calcAdiant(f);r.nota=`Mensalista desde ${dd(f.vh.find(x=>x.vinc==='mensalista').de)}: benefícios contam só os dias a partir do registro. Dias como avulso foram pagos por diária.`+(a?` O Adiantamento auxílio-transporte (${brl(a.total)}: ${a.lista} de ${dd(a.de)} a ${dd(NDIAS)}) já foi pago em recibo próprio. Aqui entram a bonificação de ${MES_CURTO} e ajuda de custo, café, alimentação e passagens de ${PROX_NOME}.`:'')}
   r.total=Object.values(r.itens).reduce((a,b)=>a+b.valor,0);
   // rateio por obra: dias trabalhados por obra
@@ -1129,7 +1132,7 @@ function renderBen(){
     h+=`<tr class="row" data-exp="${f.id}" tabindex="0"><td><b>${esc(f.nome)}</b>${selo(f)}${c.vazios?` <span class="tag">${c.vazios} dia(s) sem lançamento</span>`:''}</td>${BEN_COLS.map(([k])=>{const it=c.itens[k];if(it)tot[k]=(tot[k]||0)+it.valor;return `<td>${it?brl(it.valor):'—'}</td>`}).join('')}<td><b>${brl(c.total)}</b></td>${pgc(al.alim)}${pgc(al.livre)}${pgc(al.natal)}<td class="pg-col">${brl(esp)}</td></tr>`;
     if(S.aberto===f.id){
       h+=`<tr><td colspan="${BEN_COLS.length+6}" class="memo"><p class="hint" style="margin:0 0 10px">Acordo usado: vale a partir de ${compLabel(c.acordo.desde)} · ${esc(c.acordo.motivo)}</p>${c.nota?`<p style="margin:0 0 10px"><span class="tag">${c.nota}</span></p>`:''}<div class="memo-grid">${BEN_COLS.filter(([k])=>c.itens[k]).map(([k,l])=>{const it=c.itens[k];
-        return `<div class="memo-card"><h3>${l.replace('*','')}</h3><div class="f">${it.f}</div><div class="f">= ${brl(it.bruto)} → ${k==='transp'&&it.natal?'sem arredondamento (pago no NatalCard)':'arredondado para baixo '+(k==='transp'?'no real':'à dezena')}</div><div class="v">${brl(it.valor)}</div>${k==='bonif'&&c.eleg.bonif>DU_AGO?'<span class="tag">Dias acima da base: diária extra</span>':''}</div>`}).join('')}
+        return `<div class="memo-card"><h3>${l.replace('*','')}</h3><div class="f">${it.f}</div><div class="f">= ${brl(it.bruto)} → ${it.gravado?'valor gravado no fechamento':k==='transp'&&it.natal?'sem arredondamento (pago no NatalCard)':'arredondado para baixo '+(k==='transp'?'no real':'à dezena')}</div><div class="v">${brl(it.valor)}</div>${k==='bonif'&&c.eleg.bonif>DU_AGO?'<span class="tag">Dias acima da base: diária extra</span>':''}</div>`}).join('')}
         <div class="memo-card"><h3>Rateio por obra</h3>${c.rateio.length?c.rateio.map(x=>`<div class="f">${esc(x.obra)}${x.vinc?'':' <span class="tag">a vincular</span>'}: ${nfmt(x.dias)} dias · ${pct(x.frac)} · ${brl(c.total*x.frac)}</div>`).join(''):'<div class="f">Sem dias trabalhados.</div>'}</div>
         </div></td></tr>`;
     }
