@@ -579,6 +579,37 @@ function pendencias(emp=S.empresa){
 }
 const admDia=f=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f.adm||'');if(!m)return 1;const k=+m[3]*12+(+m[2]-1),c=ANO*12+MES;return k<c?1:k>c?99:+m[1]};
 const exigeDia=(f,d)=>obrig(d)&&d>=admDia(f)&&vincDia(f,d)!=='avulso';
+// Férias, perícia e suspensão programadas: período de datas (pode passar de um mês para o outro).
+// Preenche os dias vazios do mês aberto (dias corridos, com fins de semana e feriados); o restante entra quando o mês seguinte for aberto.
+const AG_COD=['FE','PE','SU'];
+function aplicarAgenda(f,item){
+  const k=ANO*12+MES,r={n:0,ocup:0};
+  for(const a of item?[item]:(f.agenda||[])){
+    const de=lerData(a.de),ate=lerData(a.ate);if(!de||!ate)continue;
+    const ki=de.getFullYear()*12+de.getMonth(),kf=ate.getFullYear()*12+ate.getMonth();
+    if(k<ki||k>kf||(a.feitos||{})[COMP])continue;
+    const d0=k===ki?de.getDate():1,d1=k===kf?ate.getDate():NDIAS;
+    for(let d=d0;d<=d1;d++){if(d<admDia(f)||!podeEditar(f,d))continue;
+      if(S.ponto[f.id][d]){if(S.ponto[f.id][d].c!==a.c)r.ocup++;continue}
+      S.ponto[f.id][d]={c:a.c,o:'',obs:a.obs||CODES[a.c].l};r.n++}
+    (a.feitos=a.feitos||{})[COMP]=true;
+  }
+  return r;
+}
+function agendaHTML(f){
+  const dp=S.perfil==='dp',ls=(f.agenda||[]).slice().sort((a,b)=>lerData(a.de)-lerData(b.de));
+  let h=`<h3 class="sub">Férias, perícia ou suspensão programadas</h3>`;
+  h+=ls.length?`<div class="lemb-lista">${ls.map(a=>`<div class="lemb"><span><span class="code c-${a.c}" style="padding:1px 6px;border-radius:4px">${a.c}</span> <b>${CODES[a.c].l}</b> de <b class="num">${esc(a.de)}</b> a <b class="num">${esc(a.ate)}</b>${a.obs?' · '+esc(a.obs):''}
+      <br><span class="hint">Preenchido em: ${Object.keys(a.feitos||{}).sort().map(compLabel).join(', ')||'ainda não (o mês não foi aberto)'}</span></span>
+      ${dp?`<button class="btn" data-agdel="${f.id}:${a.id}">Apagar</button>`:''}</div>`).join('')}</div>`:`<p class="hint" style="margin:0">Nenhum período programado.</p>`;
+  if(dp)h+=`<form id="agForm" class="lemb-form" data-f="${f.id}"><div class="field"><label for="agCod">Tipo</label><select id="agCod" name="cod">${AG_COD.map(c=>`<option value="${c}">${c} · ${CODES[c].l}</option>`).join('')}</select></div>
+      <div class="field"><label for="agDe">De</label><input type="text" id="agDe" name="de" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA"></div>
+      <div class="field"><label for="agAte">Até</label><input type="text" id="agAte" name="ate" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA"></div>
+      <div class="field" style="flex:1"><label for="agObs">Observação (opcional)</label><input type="text" id="agObs" name="obs" placeholder="Ex.: férias 2025/2026"></div>
+      <button class="btn primary" type="submit">Programar e preencher</button><div id="formErr" class="err" style="flex-basis:100%"></div></form>
+    <p class="hint" style="margin:4px 0 0">Preenche os dias vazios, inclusive sábados, domingos e feriados. Dias já lançados não mudam. Se o período passar deste mês, o restante é preenchido sozinho quando o mês seguinte for aberto.</p>`;
+  return h;
+}
 // avisos de "dia sem lançamento" só até ontem: dia que ainda não chegou não é cobrado (o fechamento continua exigindo o mês inteiro)
 const ateOntem=()=>{const h=new Date(),c=h.getFullYear()*12+h.getMonth(),k=ANO*12+MES;return k<c?NDIAS:k>c?0:h.getDate()-1};
 const atrasados=l=>{const a=ateOntem();return l.filter(x=>x.antes||x.d<=a)};
@@ -932,6 +963,8 @@ function trocarComp(k){
   ALL.forEach(f=>{if(!S.ponto[f.id])S.ponto[f.id]={}});
   S.aberto=null;S.cadEdit=false;S.vincEdit=false;
   registrar('Competência',antes,MES_NOME,t?'Troca de competência':'Abertura de novo mês');
+  // férias, perícia e suspensão programadas que caem neste mês
+  for(const f of ALL){const r=aplicarAgenda(f);if(r.n)registrar(`${f.nome} · ${MES_NOME}`,'Dias vazios',`${r.n} dia(s) preenchidos pelo período programado`,'Férias, perícia ou suspensão programadas')}
   render();toast(t?`Competência ${MES_NOME}.`:`Novo mês aberto: ${MES_NOME}. Cadastros e acordos continuam; o ponto começa vazio.`);
 }
 document.getElementById('selComp').addEventListener('change',e=>trocarComp(e.target.value));
@@ -1061,7 +1094,8 @@ function renderCal(){
     </div>
     <label class="ac-chk" style="font-weight:500"><input type="checkbox" id="pFds" name="fds"> Incluir sábados, domingos e feriados</label>
     <div id="formErr" class="err"></div>
-    <div class="actions" style="margin:0"><button class="btn primary" type="submit">Lançar nos dias vazios</button></div></form>`:''}</section>`;
+    <div class="actions" style="margin:0"><button class="btn primary" type="submit">Lançar nos dias vazios</button></div></form>`:''}
+  ${S.perfil==='dp'?`<div style="margin:0 14px 16px">${agendaHTML(f)}</div>`:''}</section>`;
   $('#view').innerHTML=h;
   $('#selFunc').onchange=e=>{S.calEmp=e.target.value;render()};
 }
@@ -1566,6 +1600,18 @@ $('#view').addEventListener('submit',e=>{
     registrar(`${f.nome} · ${MES_NOME}`,'Dias vazios',`${n} dia(s) lançados como ${obra}`,'Preencher o mês inteiro');
     render();return toast(noLimite(f)?`${n} dia(s) lançados. Atenção: ${f.nome} passou do limite de ${LIMITE_TESTE} dias do período de teste (${nfmt(diasTeste(f))} dias). Registre como mensalista.`:`${n} dia(s) lançados em ${obra} para ${f.nome}.`);
   }
+  if(fm.id==='agForm'){
+    const f=byId(fm.dataset.f),c=fm.cod.value,de=fm.de.value.trim(),ate=fm.ate.value.trim(),obs=fm.obs.value.trim(),d1=lerData(de),d2=lerData(ate);
+    if(!d1||!d2)return err('Informe as datas no formato DD/MM/AAAA.');
+    if(d2<d1)return err('A data final precisa ser igual ou depois da inicial.');
+    if((d2-d1)/864e5>366)return err('O período passa de um ano. Confira as datas.');
+    const item={id:'a'+Date.now(),c,de,ate,obs,criado:new Date().toLocaleDateString('pt-BR'),quem:'DP',feitos:{}};
+    (f.agenda=f.agenda||[]).push(item);
+    const r=aplicarAgenda(f,item),noMes=!!item.feitos[COMP];
+    registrar(`${CODES[c].l} programada · ${f.nome}`,'—',`${de} a ${ate}${obs?' · '+obs:''} · ${r.n} dia(s) preenchidos em ${MES_NOME}`,'Período programado');
+    render();
+    return toast(noMes?`${r.n} dia(s) de ${MES_NOME} preenchidos com ${c}.${r.ocup?` ${r.ocup} dia(s) já tinham outro lançamento e não mudaram.`:''}${d2.getFullYear()*12+d2.getMonth()>ANO*12+MES?' O restante entra quando o próximo mês for aberto.':''}`:`Programado. Os dias serão preenchidos quando ${compLabel(d1.getFullYear()+'-'+String(d1.getMonth()+1).padStart(2,'0'))} for aberto.`);
+  }
   if(fm.id==='periodoForm'){
     const f=byId(S.calEmp),de=+fm.de.value,ate=+fm.ate.value,cod=fm.cod.value,obs=fm.obs.value.trim();
     if(cod==='P'&&!fm.obra.value)return err('Cadastre uma obra antes (aba Obras).');
@@ -1790,6 +1836,7 @@ function recibosFicha(f){
   let h=`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Ponto de ${MES_NOME}</h3><button class="btn" data-govcal="${f.id}">Abrir calendário</button></div><div class="ac-cards">
     ${temAvulso(f)?card('Dias como avulso',nfmt(tAv)):''}${f.vh.some(x=>x.vinc==='mensalista')?card('Dias como mensalista',nfmt(tMen)):''}
     ${card('Faltas (F)',nF,nF?'':'off')}${card('Atestados (AT)',nAT,nAT?'':'off')}${nSU?card('Suspensões (SU)',nSU):''}${nPE?card('Perícias (PE)',nPE):''}${nFE?card('Férias (FE)',nFE):''}${card('Dias X',nX,'off')}${card('Dias sem lançamento',pend,pend?'':'off')}</div>`;
+  if(dp)h+=agendaHTML(f);
   const blocos=[];let total=0,nSel=0;
   // caixinha para juntar este recibo numa impressão só (só para recibos já emitidos)
   const sel=tipo=>dp?(nSel++,`<label class="ac-chk rsel-lbl"><input type="checkbox" class="rsel" data-f="${f.id}" value="${tipo}"> Imprimir</label>`):'';
@@ -2173,6 +2220,10 @@ $('#view').addEventListener('click',e=>{
   if(vb){S.vincEdit=!!vb.dataset.vincedit;S.cadEdit=false;render();if(S.vincEdit)$('#vincForm')?.scrollIntoView({block:'center'});return}
   const oe=e.target.closest('[data-outraemp]');
   if(oe){const f=byId(oe.dataset.outraemp);S.empresa=empresaDe(f);$('#selEmp').value=S.empresa;S.cadSel=f.id;S.cadEdit=false;render();return toast(`${f.nome} está na ${S.empresa}.`)}
+  const ag=e.target.closest('[data-agdel]');
+  if(ag){const [id,aid]=ag.dataset.agdel.split(':'),f=byId(id),a=f?.agenda?.find(x=>x.id===aid);if(!a)return;
+    if(!confirm(`Apagar o período programado de ${CODES[a.c].l.toLowerCase()} de ${a.de} a ${a.ate}?\n\nOs dias já preenchidos no ponto continuam; para tirá-los, corrija no calendário.`))return;
+    f.agenda=f.agenda.filter(x=>x!==a);registrar(`${CODES[a.c].l} programada · ${f.nome}`,`${a.de} a ${a.ate}`,'Apagada','Período programado');render();return toast('Período programado apagado.')}
   const lb=e.target.closest('[data-lembok],[data-lembdel]');
   if(lb){const [id,lid]=(lb.dataset.lembok||lb.dataset.lembdel).split(':'),f=byId(id),l=f?.lembretes?.find(x=>x.id===lid);if(!l)return;
     if(lb.dataset.lembok){l.feito=new Date().toLocaleDateString('pt-BR');registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Feito','Lembrete do acordo concluído');render();return toast('Lembrete concluído.')}
