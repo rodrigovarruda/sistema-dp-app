@@ -712,13 +712,13 @@ const insalTxt=o=>o?.insal?`insalubridade ${nfmt2(o.insal.pct).replace(/,00$/,''
 const insalDe=(k,f)=>{const o=OBRAS[k];if(!o?.insal||(o.insal.exceto||[]).some(x=>norm(x)===norm(f.funcao)))return 0;return o.insal.base*o.insal.pct/100};
 // ---------- Custo por obra ----------
 const prevKey=()=>{let a=ANO,m=MES-1;if(m<0){m=11;a--}return a+'-'+String(m+1).padStart(2,'0')};
-const CUSTO_COLS=[['diarias','Diárias'],['sal1','Salário 1ª quinzena'],['sal2','Salário 2ª quinzena'],['insal','Insalubridade'],['bonif','Bonificação'],['ajuda','Ajuda de custo'],['cafe','Auxílio café'],['alim','Alimentação'],['transp','Passagens'],['cesta','Cesta básica'],['guias','INSS/FGTS']];
+const CUSTO_COLS=[['diarias','Diárias'],['sal1','Salário 1ª quinzena'],['sal2','Salário 2ª quinzena'],['insal','Insalubridade'],['peric','Periculosidade'],['bonif','Bonificação'],['ajuda','Ajuda de custo'],['cafe','Auxílio café'],['alim','Alimentação'],['transp','Passagens'],['cesta','Cesta básica'],['guias','INSS/FGTS']];
 function custoFunc(f,guia=0){
   const E=EMPRESAS[empresaDe(f)]||{},A=acordo(f),c=calc(f),p=S.ponto[f.id];
   const r={};let totM=0;
   for(const d in p){const x=p[d];if(!CODES[x.c]?.trab)continue;const k=resolve(x.o)||('?'+x.o);r[k]=r[k]||{m:0,a:0};
     if(vincDia(f,+d)==='avulso')r[k].a+=CODES[x.c].peso;else{r[k].m+=CODES[x.c].peso;totM+=CODES[x.c].peso}}
-  const it={sal1:0,sal2:0,insal:0,bonif:0,ajuda:0,cafe:0,alim:0,transp:0,cesta:0,guias:0};let est=false,estSal=false,fatorIns=0;
+  const it={sal1:0,sal2:0,insal:0,peric:0,bonif:0,ajuda:0,cafe:0,alim:0,transp:0,cesta:0,guias:0};let est=false,estSal=false,fatorIns=0;
   const m=f.vh.find(x=>x.vinc==='mensalista');
   if(m){
     const ini=Math.max(m.de,admDia(f));
@@ -728,7 +728,9 @@ function custoFunc(f,guia=0){
       // estimativa sem folha: metade em cada quinzena
       const diasVinc=ini<=1?30:Math.min(30,NDIAS-ini+1),est2=A.salario/30*Math.max(0,diasVinc-nF)*(1+(+E.encargos||0)/100);it.sal1=it.sal2=est2/2;
       // a insalubridade segue a mesma proporção do salário estimado (com o salário informado, ela já vem dentro dele)
-      fatorIns=Math.max(0,diasVinc-nF)/30*(1+(+E.encargos||0)/100)}
+      fatorIns=Math.max(0,diasVinc-nF)/30*(1+(+E.encargos||0)/100);
+      // periculosidade: % do próprio salário, na mesma proporção, rateada pelas obras como o salário
+      if(A.peric)it.peric=A.salario*A.peric/100*fatorIns}
     if(c.itens.bonif)it.bonif=c.itens.bonif.valor;
     // verbas referentes a este mês: adiantamento/cesta do registro, ou fechamento do mês anterior
     if(diaEntrada(f)){const a=calcAdiant(f);if(a&&f.adiantQuando)for(const x of a.itens)it[x.k]+=x.valor;if(temCestaReg(f))it.cesta+=valorCesta(f)}
@@ -770,6 +772,7 @@ function renderCusto(){
     <div class="legend"><span>Custo atribuído à obra onde o funcionário trabalhou, na proporção dos dias. Diárias vão direto para a obra do dia.</span>
     <span>Salário: valor líquido pago em cada quinzena (aba Salários); no detalhe da obra aparecem o dia e a conta do pagamento. Sem valor informado, usa a estimativa (metade em cada quinzena): </span><span>mês completo = salário cheio; quem entrou no mês = salário ÷ 30 × dias desde o registro; menos salário ÷ 30 por falta (F); mais encargos da empresa (aba Empresas).</span>
     <span>Insalubridade: só entra quando o salário é estimado, na obra com insalubridade cadastrada (aba Obras), proporcional aos dias na obra. Com o salário líquido informado, ela já está dentro dele.</span>
+    <span>Periculosidade: % do salário no acordo do funcionário, rateada pelas obras como o salário; também só entra quando o salário é estimado.</span>
     <span>Ajuda de custo, café, alimentação, passagens e cesta entram no mês a que se referem: vêm do fechamento de ${compLab(prevKey())} ou do registro deste mês.</span>
     ${algumEst?'<span><span class="tag">benefícios estimados</span> mês anterior ainda não fechado no sistema: valores tirados do acordo.</span>':''}${algumEstSal?'<span><span class="tag">salário estimado</span> preencha a aba Salários com o líquido pago.</span>':''}
     <span>Cesta básica pelo valor cadastrado na aba Empresas.</span><span>INSS/FGTS: guias informadas na aba Salários (opcional), divididas entre os funcionários da empresa pelo salário e depois pelas obras.</span></div></section>`;
@@ -1172,7 +1175,7 @@ const nfmt2=v=>v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFraction
 const parseBRL=s=>parseFloat(String(s).trim().replace(/\./g,'').replace(',','.'));
 const PG={especie:'Espécie',alim:'Alelo Alimentação',livre:'Alelo Saldo Livre',natal:'NatalCard'};
 function acordoInputs(a){
-  return `<div class="ac-row"><label class="ac-chk" for="val_salario">Salário mensal <span class="hint" style="font-weight:400">(para o custo da obra)</span></label><div class="ac-val"><span>R$</span><input type="text" inputmode="decimal" id="val_salario" name="val_salario" value="${a?.salario?nfmt2(a.salario):''}" placeholder="0,00"><span class="hint">por mês</span></div></div><div class="ac-row"><label class="ac-chk"><input type="checkbox" id="chk_cesta" name="chk_cesta" ${a?.cesta?'checked':''}> Cesta básica (em substituição ao almoço)</label><span class="hint">recibo emitido no fechamento da 2ª quinzena</span></div>`+VERBAS.map(([k,l,u])=>{const v=k==='tarifa'?a?.tarifa:a?.ben?.[k],on=v!=null,pg=a?.pg?.[k]||'especie';
+  return `<div class="ac-row"><label class="ac-chk" for="val_salario">Salário mensal <span class="hint" style="font-weight:400">(para o custo da obra)</span></label><div class="ac-val"><span>R$</span><input type="text" inputmode="decimal" id="val_salario" name="val_salario" value="${a?.salario?nfmt2(a.salario):''}" placeholder="0,00"><span class="hint">por mês</span></div></div><div class="ac-row"><label class="ac-chk" for="val_peric">Periculosidade <span class="hint" style="font-weight:400">(% do salário, para o custo da obra)</span></label><div class="ac-val"><input type="text" inputmode="decimal" id="val_peric" name="val_peric" value="${a?.peric?nfmt2(a.peric).replace(/,00$/,''):''}" placeholder="ex.: 30" style="max-width:130px"><span>%</span><span class="hint">vazio = não tem</span></div></div><div class="ac-row"><label class="ac-chk"><input type="checkbox" id="chk_cesta" name="chk_cesta" ${a?.cesta?'checked':''}> Cesta básica (em substituição ao almoço)</label><span class="hint">recibo emitido no fechamento da 2ª quinzena</span></div>`+VERBAS.map(([k,l,u])=>{const v=k==='tarifa'?a?.tarifa:a?.ben?.[k],on=v!=null,pg=a?.pg?.[k]||'especie';
     return `<div class="ac-row"><label class="ac-chk"><input type="checkbox" id="chk_${k}" name="chk_${k}" ${on?'checked':''}> ${l}</label>
       <div class="ac-val"><span>R$</span><input type="text" inputmode="decimal" id="val_${k}" name="val_${k}" value="${on?nfmt2(v):''}" aria-label="Valor de ${l}"><span class="hint">${u}</span>
       <select id="pg_${k}" name="pg_${k}" aria-label="Forma de pagamento de ${l}" title="Forma de pagamento no fechamento">${Object.entries(PG).filter(([x])=>x!=='natal'||k==='tarifa').map(([x,n])=>`<option value="${x}" ${x===pg?'selected':''}>${n}</option>`).join('')}</select>
@@ -1188,10 +1191,14 @@ function lerAcordo(fm){
     if(k==='tarifa')tarifa=v;else ben[k]=v;
   }
   const sal=fm.val_salario?parseBRL(fm.val_salario.value||''):NaN;
-  return {ben,tarifa,pg,cesta:!!fm.chk_cesta?.checked,salario:sal>0?sal:null,ajudaFixa:ben.ajuda!=null&&!!fm.fixa_ajuda?.checked};
+  const per=fm.val_peric?.value.trim()?parseBRL(fm.val_peric.value):0;
+  if(!(per>=0&&per<=100))return {erro:'Informe a periculosidade em % (ex.: 30) ou deixe vazio.'};
+  if(per>0&&!(sal>0))return {erro:'Informe o salário mensal: a periculosidade é calculada sobre ele.'};
+  return {ben,tarifa,pg,cesta:!!fm.chk_cesta?.checked,salario:sal>0?sal:null,peric:per>0?per:null,ajudaFixa:ben.ajuda!=null&&!!fm.fixa_ajuda?.checked};
 }
 function acordoResumo(a){
-  return `<div class="ac-card ${a.salario?'':'off'}"><span class="hint">Salário mensal</span><b class="num">${a.salario?brl(a.salario):'Não informado'}</b><span class="hint">custo da obra</span></div>`+`<div class="ac-card ${a.cesta?'':'off'}"><span class="hint">Cesta básica</span><b>${a.cesta?'Tem direito':'Sem direito'}</b><span class="hint">${a.cesta?'em substituição ao almoço':''}</span></div>`+VERBAS.map(([k,l,u])=>{const v=k==='tarifa'?a.tarifa:a.ben[k];
+  return `<div class="ac-card ${a.salario?'':'off'}"><span class="hint">Salário mensal</span><b class="num">${a.salario?brl(a.salario):'Não informado'}</b><span class="hint">custo da obra</span></div>`+
+    (a.peric?`<div class="ac-card"><span class="hint">Periculosidade</span><b class="num">${brl(a.salario*a.peric/100)}</b><span class="hint">${nfmt2(a.peric).replace(/,00$/,'')}% do salário · custo da obra</span></div>`:'')+`<div class="ac-card ${a.cesta?'':'off'}"><span class="hint">Cesta básica</span><b>${a.cesta?'Tem direito':'Sem direito'}</b><span class="hint">${a.cesta?'em substituição ao almoço':''}</span></div>`+VERBAS.map(([k,l,u])=>{const v=k==='tarifa'?a.tarifa:a.ben[k];
     return `<div class="ac-card ${v==null?'off':''}"><span class="hint">${l}</span><b class="num">${v==null?'Sem direito':brl(v)}</b><span class="hint">${v==null?'':u}</span>${v!=null&&a.pg?.[k]?`<span class="tag">${PG[a.pg[k]]}</span>`:''}${k==='ajuda'&&v!=null&&a.ajudaFixa?'<span class="tag">Fixa: não desconta faltas</span>':''}</div>`}).join('');
 }
 // Obras de contratação de uma empresa (só as em andamento); a escolhida vem marcada
@@ -1471,7 +1478,7 @@ function registrar(onde,antes,depois,just){
   const now=new Date();
   S.audit.push({quando:now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),quem:NV.nome||'DP (usuário de exemplo)',onde,antes,depois,just});
 }
-const resumoTxt=a=>VERBAS.filter(([k])=>(k==='tarifa'?a.tarifa:a.ben[k])!=null).map(([k,l])=>l.split(' (')[0]+' '+brl(k==='tarifa'?a.tarifa:a.ben[k])).join(', ')||'nenhuma verba';
+const resumoTxt=a=>(VERBAS.filter(([k])=>(k==='tarifa'?a.tarifa:a.ben[k])!=null).map(([k,l])=>l.split(' (')[0]+' '+brl(k==='tarifa'?a.tarifa:a.ben[k])).join(', ')||'nenhuma verba')+(a.peric?` · periculosidade ${nfmt2(a.peric).replace(/,00$/,'')}%`:'');
 $('#view').addEventListener('submit',e=>{
   e.preventDefault();const fm=e.target,err=m=>{fm.querySelector('#formErr').textContent=m};
   if(fm.id==='lembForm'){
@@ -1615,7 +1622,7 @@ $('#view').addEventListener('submit',e=>{
     if(motivo.length<4)return err('Escreva o motivo da mudança.');
     let ac=null;if(novo==='mensalista'){ac=lerAcordo(fm);if(ac.erro)return err(ac.erro)}
     f.vh.push({de,vinc:novo});f.vinc=novo;if(novo==='mensalista')f.admissao=dd(de)+'/'+ANO;
-    if(novo==='mensalista'){f.acordos=f.acordos.filter(a=>a.desde!==COMP);f.acordos.push({desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo do registro',quem:'DP'});f.acordos.sort((a,b)=>a.desde.localeCompare(b.desde))}
+    if(novo==='mensalista'){f.acordos=f.acordos.filter(a=>a.desde!==COMP);f.acordos.push({desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,peric:ac.peric||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo do registro',quem:'DP'});f.acordos.sort((a,b)=>a.desde.localeCompare(b.desde))}
     else{f.diaria=f.diaria||DIARIAS[f.funcao];f.diariasLancadas=f.diariasLancadas||0}
     registrar(`Vínculo · ${f.nome}`,VL[novo==='mensalista'?'avulso':'mensalista'],`${VL[novo]} a partir de ${dd(de)}/${ANO}`,motivo);
     S.vincEdit=false;
@@ -1639,7 +1646,7 @@ $('#view').addEventListener('submit',e=>{
     const id='n'+Date.now(),funcao=fm.funcao.value,vinc=fm.vinc.value,emp=fm.empresa.value;
     const f={id,nome,cpf:fmtCpf(fm.cpf.value),funcao,vinc,vh:[{de:1,vinc}],lot:[{de:1,obra:fm.obra.value}],diaria:vinc==='avulso'?DIARIAS[funcao]:undefined,diariasLancadas:0,
       adm,contrat:{empresa:emp,obra:fm.obra.value,funcao,vinc},
-      acordos:[{desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo da admissão',quem:'DP'}]};
+      acordos:[{desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,peric:ac.peric||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo da admissão',quem:'DP'}]};
     FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};S.cadSel=id;
     if(emp!==S.empresa&&!TODAS()){S.empresa=emp;$('#selEmp').value=emp}
     registrar(`Cadastro · ${nome}`,'—',`Admitido na ${emp} em ${adm} para ${OBRAS[fm.obra.value].nome} · `+(vinc==='avulso'?'avulso':resumoTxt(f.acordos[0])),'Admissão');
@@ -1655,7 +1662,7 @@ $('#view').addEventListener('submit',e=>{
     const motivo=fm.motivo.value.trim();if(motivo.length<4)return err('Escreva o motivo da alteração.');
     const f=byId(S.cadSel),antes=acordo(f,fm.desde.value);
     f.acordos=f.acordos.filter(a=>a.desde!==fm.desde.value);
-    f.acordos.push({desde:fm.desde.value,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,ajudaFixa:!!ac.ajudaFixa,motivo,quem:'DP'});
+    f.acordos.push({desde:fm.desde.value,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,peric:ac.peric||null,ajudaFixa:!!ac.ajudaFixa,motivo,quem:'DP'});
     f.acordos.sort((a,b)=>a.desde.localeCompare(b.desde));
     registrar(`Acordo · ${f.nome} · a partir de ${compLabel(fm.desde.value)}`,resumoTxt(antes),resumoTxt(acordo(f,fm.desde.value)),motivo);
     S.cadEdit=false;render();
