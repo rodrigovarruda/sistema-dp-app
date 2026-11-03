@@ -579,6 +579,9 @@ function pendencias(emp=S.empresa){
 }
 const admDia=f=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f.adm||'');if(!m)return 1;const k=+m[3]*12+(+m[2]-1),c=ANO*12+MES;return k<c?1:k>c?99:+m[1]};
 const exigeDia=(f,d)=>obrig(d)&&d>=admDia(f)&&vincDia(f,d)!=='avulso';
+// avisos de "dia sem lançamento" só até ontem: dia que ainda não chegou não é cobrado (o fechamento continua exigindo o mês inteiro)
+const ateOntem=()=>{const h=new Date(),c=h.getFullYear()*12+h.getMonth(),k=ANO*12+MES;return k<c?NDIAS:k>c?0:h.getDate()-1};
+const atrasados=l=>{const a=ateOntem();return l.filter(x=>x.antes||x.d<=a)};
 function pendF(f){const o=[];for(let d=1;d<=NDIAS;d++){if(exigeDia(f,d)&&!S.ponto[f.id][d])o.push({f,d});else if(d<admDia(f)&&S.ponto[f.id][d])o.push({f,d,antes:true})}return o}
 const admissaoTxt=f=>{if(f.admissao)return f.admissao;const m=f.vh.find(x=>x.vinc==='mensalista'&&x.de>1);if(m)return dd(m.de)+'/'+ANO;return f.vinc==='mensalista'?'antes de '+MES_NOME:'ainda não registrado'};
 const nomeInicio=f=>f.contrat?.vinc==='avulso'?'início do período de teste':'admissão';
@@ -935,9 +938,9 @@ document.getElementById('selComp').addEventListener('change',e=>trocarComp(e.tar
 document.getElementById('statusBar').addEventListener('click',e=>{if(e.target.closest('[data-golemb]')){S.tab='funcionarios';S.cadSel='lembretes';render();$('#view').scrollIntoView({block:'start'})}});
 function renderStatus(){
   renderCompSel();
-  const pe=pendencias().length,nv=naoVinculadas().length,dv=divergAV().length;
+  const pe=atrasados(pendencias()).length,nv=naoVinculadas().length,dv=divergAV().length;
   $('#statusBar').innerHTML=`<span class="chip st">${MES_NOME} · ${TODAS()?'Todas as empresas':ST_LABEL[S.status[S.empresa]]}</span>
-   <span class="chip ${pe?'bad':'ok'}">${pe?pe+' dias sem lançamento':'Sem dias pendentes'}</span>
+   <span class="chip ${pe?'bad':'ok'}" title="Conta só os dias até ontem; os dias que ainda não chegaram não são cobrados">${pe?pe+' dias sem lançamento até ontem':'Sem dias pendentes até ontem'}</span>
    <span class="chip ${nv?'warn':'ok'}">${nv?nv+' nome(s) de obra a vincular':'Obras vinculadas'}</span>
    ${dv?`<span class="chip warn">${dv} avulso(s) com dias trabalhados ≠ diárias</span>`:''}
    ${(()=>{const n=funcsEmp().filter(f=>S.fechF[f.id]).length;return n?`<span class="chip ok">${n} de ${funcsEmp().length} funcionários fechados</span>`:''})()}
@@ -947,7 +950,7 @@ function renderStatus(){
 }
 function cellHTML(f,d){
   const r=S.ponto[f.id][d],can=podeEditar(f,d),we=isWE(d)||!!FERIADOS_AGO[d];
-  const pend=!r&&exigeDia(f,d);
+  const pend=!r&&exigeDia(f,d)&&d<=ateOntem();
   const unl=r&&CODES[r.c].trab&&r.o&&!resolve(r.o);
   const title=`${f.nome} · ${WD_LONG[dow(d)]} ${dd(d)} · ${r?CODES[r.c].l+(r.o?' · '+r.o:'')+(r.obs?' · '+r.obs:''):'Não informado'}${can?'':' · sem permissão para editar'}`;
   return `<td class="${we?'we':''}"><button class="cell ${r?'c-'+r.c:''} ${corDia(r)} ${pend?'pend':''} ${r&&r.obs?'has-obs':''}" data-f="${f.id}" data-d="${d}" ${can?'':'disabled'} title="${esc(title)}" aria-label="${esc(title)}">${r?(CODES[r.c].trab?esc(S.planNomes?rotulo(r):rotuloCurto(r)):CODES[r.c].s):(pend?'·':'')}${unl?'<span class="dot"></span>':''}</button></td>`;
@@ -1033,7 +1036,7 @@ function renderCal(){
     <div class="cal-wrap cal-side"><div><div class="cal">${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(x=>`<div class="h">${x}</div>`).join('')}`;
   for(let i=0;i<dow(1);i++)h+='<div></div>';
   for(let d=1;d<=NDIAS;d++){
-    const r=S.ponto[f.id][d],can=podeEditar(f,d),pend=!r&&exigeDia(f,d),unl=r&&CODES[r.c].trab&&r.o&&!resolve(r.o);
+    const r=S.ponto[f.id][d],can=podeEditar(f,d),pend=!r&&exigeDia(f,d)&&d<=ateOntem(),unl=r&&CODES[r.c].trab&&r.o&&!resolve(r.o);
     h+=`<button class="day ${isWE(d)||FERIADOS_AGO[d]?'we':''} ${pend?'pend':''}" data-f="${f.id}" data-d="${d}" ${can?'':'disabled'} aria-label="Dia ${d}">
       <span class="n">${d}${FERIADOS_AGO[d]?' · '+FERIADOS_AGO[d]:''}</span>${r?`<span class="code c-${r.c} ${corDia(r)} ${unl?'unl-chip':''}">${CODES[r.c].trab?esc(rotulo(r)):CODES[r.c].s}</span>`:`<span class="ob">${pend?'Não informado':''}</span>`}${r&&r.obs?`<span class="ob">“${esc(r.obs)}”</span>`:''}</button>`;
   }
@@ -1782,7 +1785,7 @@ function recibosFicha(f){
   const dp=S.perfil==='dp',st=stDe(f),pode=dp&&st!=='fechado'&&st!=='aguardando',p=S.ponto[f.id],c=calc(f);
   let tAv=0,tMen=0,nF=0,nAT=0,nX=0,nSU=0,nPE=0,nFE=0;
   for(const d in p){const x=p[d];if(CODES[x.c].trab){if(vincDia(f,+d)==='avulso')tAv+=CODES[x.c].peso;else tMen+=CODES[x.c].peso}else if(x.c==='F')nF++;else if(x.c==='AT')nAT++;else if(x.c==='SU')nSU++;else if(x.c==='PE')nPE++;else if(x.c==='FE')nFE++;else nX++}
-  const pend=pendF(f).length,nv=nvF(f);
+  const pend=atrasados(pendF(f)).length,nv=nvF(f);
   const card=(t,v,cls='')=>`<div class="ac-card ${cls}"><span class="hint">${t}</span><b class="num">${v}</b></div>`;
   let h=`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Ponto de ${MES_NOME}</h3><button class="btn" data-govcal="${f.id}">Abrir calendário</button></div><div class="ac-cards">
     ${temAvulso(f)?card('Dias como avulso',nfmt(tAv)):''}${f.vh.some(x=>x.vinc==='mensalista')?card('Dias como mensalista',nfmt(tMen)):''}
