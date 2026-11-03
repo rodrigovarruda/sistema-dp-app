@@ -2007,7 +2007,7 @@ function aleloPadrao(f,total){
 function gravarFech(f,q,alelo,cesta){
   const c=calc(f),aux=auxTotal(c);
   if(cesta===undefined)cesta=!!acordo(f).cesta;
-  S.fechF[f.id]={quando:q,total:c.total,aux,alelo,especie:aux-aleloSoma(alelo),cesta:!!acordo(f).cesta&&cesta,cestaValor:valorCesta(f),
+  S.fechF[f.id]={quando:q,total:c.total,aux,alelo,especie:Math.round((aux-aleloSoma(alelo))*100)/100,cesta:!!acordo(f).cesta&&cesta,cestaValor:valorCesta(f),
     itens:Object.fromEntries(Object.keys(BEN_NOMES).map(k=>[k,c.itens[k]?.valor||0]))};
   if(aleloSoma(alelo)>0)f.aleloPadrao={...alelo};
   registrar(`Fechamento · ${f.nome} · ${MES_NOME}`,'Aberto',`Fechado · auxílio-transporte ${brl(aux)}${aleloSoma(alelo)?` (espécie ${brl(aux-aleloSoma(alelo))} · Alelo Alimentação ${brl(alelo.alim)} · Alelo Saldo Livre ${brl(alelo.livre)}${alelo.natal?' · NatalCard '+brl(alelo.natal):''})`:''}`,'Fechamento da 2ª quinzena');
