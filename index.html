@@ -443,6 +443,8 @@ const brl=v=>(+v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const nfmt=v=>v.toLocaleString('pt-BR',{maximumFractionDigits:2});
 const pct=v=>(v*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
 const floor10=v=>Math.floor((v+1e-9)/10)*10;
+// passagens: em espécie arredonda para baixo no real; no NatalCard (recarga) vai o valor exato, em centavos
+const arredTransp=(v,natal)=>natal?Math.round(v*100)/100:Math.floor(v+1e-9);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 const EMPRESAS={CONARTE:{razao:'',cnpj:'',end:'',cidade:'',logo:''},ENGEVAC:{razao:'',cnpj:'',end:'',cidade:'',logo:''},CIENG:{razao:'',cnpj:'',end:'',cidade:'',logo:''}};
@@ -652,7 +654,7 @@ function calc(f){
   if(A.ben.ajuda!=null&&A.ajudaFixa){const bruto=A.ben.ajuda;r.itens.ajuda={bruto,valor:floor10(bruto),ref:PROX_NOME,f:`${brl(A.ben.ajuda)} · valor fixo do acordo (faltas de ${MES_CURTO} não descontam)`}}
   for(const k of ['ajuda','cafe'])if(A.ben[k]!=null&&!(k==='ajuda'&&A.ajudaFixa)){const bruto=A.ben[k]/DU_SET*diasSet;r.itens[k]={bruto,valor:floor10(bruto),ref:PROX_NOME,f:`${brl(A.ben[k])} ÷ ${DU_SET} dias úteis de ${PROX_NOME} × (${DU_SET} − ${nfmt(faltas)} faltas de ${MES_CURTO}) dias`}}
   if(A.ben.alim!=null){const bruto=A.ben.alim/DU_SET*diasSet;r.itens.alim={bruto,valor:floor10(bruto),ref:PROX_NOME,f:`${brl(A.ben.alim)} ÷ ${DU_SET} dias úteis de ${PROX_NOME} × (${DU_SET} − ${nfmt(faltas)} faltas de ${MES_CURTO}) dias`}}
-  if(A.tarifa!=null){const bruto=2*A.tarifa*diasSet;r.itens.transp={bruto,valor:Math.floor(bruto+1e-9),ref:PROX_NOME,f:`2 × tarifa ${brl(A.tarifa)} × ${nfmt(diasSet)} dias`}}
+  if(A.tarifa!=null){const bruto=2*A.tarifa*diasSet,natal=A.pg?.tarifa==='natal';r.itens.transp={bruto,valor:arredTransp(bruto,natal),natal,ref:PROX_NOME,f:`2 × tarifa ${brl(A.tarifa)} × ${nfmt(diasSet)} dias`}}
   r.acordo=A;
   const avDias=Object.entries(p).reduce((a,[d,x])=>a+(CODES[x.c].trab&&vincDia(f,+d)==='avulso'?CODES[x.c].peso:0),0);
   if(temAvulso(f)&&avDias>0){const per=f.vh.length>1?` · período como avulso: ${f.vh.filter(x=>x.vinc==='avulso').map(x=>{const i=f.vh.indexOf(x),fim=f.vh[i+1]?f.vh[i+1].de-1:NDIAS;return dd(x.de)+' a '+dd(fim)}).join(', ')}`:'';
@@ -775,7 +777,7 @@ function custoFunc(f,guia=0){
     if(diaEntrada(f)){const a=calcAdiant(f);if(a&&f.adiantQuando)for(const x of a.itens)it[x.k]+=x.valor;if(temCestaReg(f))it.cesta+=valorCesta(f)}
     else{const pv=S.comps?.[prevKey()]?.fechF?.[f.id];
       if(pv&&pv.itens){for(const k of ['ajuda','cafe','alim','transp'])it[k]+=pv.itens[k]||0;if(pv.cesta)it.cesta+=pv.cestaValor!=null?pv.cestaValor:valorCesta(f)}
-      else{est=true;for(const k of ['ajuda','cafe','alim'])it[k]+=A.ben[k]||0;if(A.tarifa)it.transp+=Math.floor(2*A.tarifa*DU_AGO);if(A.cesta)it.cesta+=valorCesta(f)}}
+      else{est=true;for(const k of ['ajuda','cafe','alim'])it[k]+=A.ben[k]||0;if(A.tarifa)it.transp+=arredTransp(2*A.tarifa*DU_AGO,A.pg?.tarifa==='natal');if(A.cesta)it.cesta+=valorCesta(f)}}
   }
   it.guias=guia;
   const dia=f.diaria||DIARIAS[f.funcao]||0,out={};
@@ -1127,7 +1129,7 @@ function renderBen(){
     h+=`<tr class="row" data-exp="${f.id}" tabindex="0"><td><b>${esc(f.nome)}</b>${selo(f)}${c.vazios?` <span class="tag">${c.vazios} dia(s) sem lançamento</span>`:''}</td>${BEN_COLS.map(([k])=>{const it=c.itens[k];if(it)tot[k]=(tot[k]||0)+it.valor;return `<td>${it?brl(it.valor):'—'}</td>`}).join('')}<td><b>${brl(c.total)}</b></td>${pgc(al.alim)}${pgc(al.livre)}${pgc(al.natal)}<td class="pg-col">${brl(esp)}</td></tr>`;
     if(S.aberto===f.id){
       h+=`<tr><td colspan="${BEN_COLS.length+6}" class="memo"><p class="hint" style="margin:0 0 10px">Acordo usado: vale a partir de ${compLabel(c.acordo.desde)} · ${esc(c.acordo.motivo)}</p>${c.nota?`<p style="margin:0 0 10px"><span class="tag">${c.nota}</span></p>`:''}<div class="memo-grid">${BEN_COLS.filter(([k])=>c.itens[k]).map(([k,l])=>{const it=c.itens[k];
-        return `<div class="memo-card"><h3>${l.replace('*','')}</h3><div class="f">${it.f}</div><div class="f">= ${brl(it.bruto)} → arredondado para baixo ${k==='transp'?'no real':'à dezena'}</div><div class="v">${brl(it.valor)}</div>${k==='bonif'&&c.eleg.bonif>DU_AGO?'<span class="tag">Dias acima da base: diária extra</span>':''}</div>`}).join('')}
+        return `<div class="memo-card"><h3>${l.replace('*','')}</h3><div class="f">${it.f}</div><div class="f">= ${brl(it.bruto)} → ${k==='transp'&&it.natal?'sem arredondamento (pago no NatalCard)':'arredondado para baixo '+(k==='transp'?'no real':'à dezena')}</div><div class="v">${brl(it.valor)}</div>${k==='bonif'&&c.eleg.bonif>DU_AGO?'<span class="tag">Dias acima da base: diária extra</span>':''}</div>`}).join('')}
         <div class="memo-card"><h3>Rateio por obra</h3>${c.rateio.length?c.rateio.map(x=>`<div class="f">${esc(x.obra)}${x.vinc?'':' <span class="tag">a vincular</span>'}: ${nfmt(x.dias)} dias · ${pct(x.frac)} · ${brl(c.total*x.frac)}</div>`).join(''):'<div class="f">Sem dias trabalhados.</div>'}</div>
         </div></td></tr>`;
     }
