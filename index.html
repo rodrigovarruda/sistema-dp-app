@@ -8,7 +8,7 @@
   --bg:#eef1f0; --surface:#ffffff; --surface-2:#f6f8f7; --ink:#17252f; --muted:#5b6a72; --line:#d5dcde;
   --brand:#1f4d63; --brand-ink:#ffffff; --accent:#b8740b; --accent-soft:#fbefd9;
   --ok:#1f7a4c; --ok-bg:#dff2e7; --half:#4f8a2a; --half-bg:#ecf5df;
-  --bad:#b3261e; --bad-bg:#fbe1de; --warn:#94600a; --warn-bg:#fcefd2;
+  --bad:#b3261e; --bad-bg:#fbe1de; --warn:#94600a; --warn-bg:#fcefd2; --su:#9a4400; --su-bg:#ffd9b0; --pe:#5b2a9e; --pe-bg:#e9dcfb;
   --rest:#4d6070; --rest-bg:#e6ebef; --av:#0d6f73; --av-bg:#d9f0ef; --ft:#6b3fa0; --ft-bg:#ece3f7;
   --weekend:#f0f2f3; --focus:#2f7fb0;
   --conarte:#b4530a; --conarte-bg:#fde6d2; --engevac:#1d5fa8; --engevac-bg:#dce8f8; --cieng:#4f5b66; --cieng-bg:#e3e7eb;
@@ -20,7 +20,7 @@
   --bg:#0e1518; --surface:#162126; --surface-2:#1b282e; --ink:#e2e9ec; --muted:#95a5ad; --line:#2a3a41;
   --brand:#5ea6c7; --brand-ink:#0b1417; --accent:#e3a43c; --accent-soft:#3a2c12;
   --ok:#6fd39c; --ok-bg:#163a28; --half:#a6d77a; --half-bg:#24361a;
-  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12;
+  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12; --su:#ffb36b; --su-bg:#4a2a0c; --pe:#c9a8ff; --pe-bg:#33204f;
   --rest:#a9b9c6; --rest-bg:#24313a; --av:#6fd6d2; --av-bg:#123a3a; --ft:#c7a5f0; --ft-bg:#2f2442;
   --weekend:#121c20; --focus:#7cc3e6; color-scheme:dark;
   --conarte:#f5a35c; --conarte-bg:#3d2614; --engevac:#86b9f0; --engevac-bg:#14283f; --cieng:#b9c3cc; --cieng-bg:#2b3238}}
@@ -28,7 +28,7 @@
   --bg:#0e1518; --surface:#162126; --surface-2:#1b282e; --ink:#e2e9ec; --muted:#95a5ad; --line:#2a3a41;
   --brand:#5ea6c7; --brand-ink:#0b1417; --accent:#e3a43c; --accent-soft:#3a2c12;
   --ok:#6fd39c; --ok-bg:#163a28; --half:#a6d77a; --half-bg:#24361a;
-  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12;
+  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12; --su:#ffb36b; --su-bg:#4a2a0c; --pe:#c9a8ff; --pe-bg:#33204f;
   --rest:#a9b9c6; --rest-bg:#24313a; --av:#6fd6d2; --av-bg:#123a3a; --ft:#c7a5f0; --ft-bg:#2f2442;
   --weekend:#121c20; --focus:#7cc3e6; color-scheme:dark;
   --conarte:#f5a35c; --conarte-bg:#3d2614; --engevac:#86b9f0; --engevac-bg:#14283f; --cieng:#b9c3cc; --cieng-bg:#2b3238}
@@ -98,6 +98,7 @@ th.we,td.we{background:var(--weekend)}
 .cell .dot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
 .c-P{background:var(--ok-bg);color:var(--ok)} .c-M{background:var(--half-bg);color:var(--half)}
 .c-F{background:var(--bad-bg);color:var(--bad)} .c-FJ,.c-AT{background:var(--warn-bg);color:var(--warn)}
+.c-SU{background:var(--su-bg);color:var(--su)} .c-PE{background:var(--pe-bg);color:var(--pe)}
 .c-FE,.c-FO,.c-D,.c-X{background:var(--rest-bg);color:var(--rest)} .c-AV{background:var(--av-bg);color:var(--av)} .c-FT{background:var(--ft-bg);color:var(--ft)}
 td.tot{padding:0 8px;font-family:var(--f-data);font-weight:600;white-space:nowrap}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
@@ -406,6 +407,9 @@ const CODES={
   M:{s:'½ Obra',l:'Meio dia trabalhado',peso:.5,trab:true},
   F:{s:'F',l:'Falta não justificada',peso:0},
   AT:{s:'AT',l:'Atestado médico',peso:0},
+  // suspensão: dia não pago (desconta como falta); perícia: dia justificado (como o atestado)
+  SU:{s:'SU',l:'Suspensão',peso:0},
+  PE:{s:'PE',l:'Perícia (INSS)',peso:0},
   X:{s:'X',l:'Sábado, domingo, feriado ou falta justificada',peso:0}
 };
 // Elegibilidade aprovada pelo DP: só dias trabalhados contam (meio dia = 0,5)
@@ -718,7 +722,7 @@ function custoFunc(f,guia=0){
     const ini=Math.max(m.de,admDia(f));
     const fo=S.folha?.[f.id],pago=fo?(+fo.q1||0)+(+fo.q2||0):0;
     if(pago>0){it.sal1=+fo.q1||0;it.sal2=+fo.q2||0}
-    else if(A.salario&&ini<=NDIAS){estSal=true;const nF=Object.entries(p).filter(([d,x])=>+d>=ini&&x.c==='F').length;
+    else if(A.salario&&ini<=NDIAS){estSal=true;const nF=Object.entries(p).filter(([d,x])=>+d>=ini&&(x.c==='F'||x.c==='SU')).length;
       // estimativa sem folha: metade em cada quinzena
       const diasVinc=ini<=1?30:Math.min(30,NDIAS-ini+1),est2=A.salario/30*Math.max(0,diasVinc-nF)*(1+(+E.encargos||0)/100);it.sal1=it.sal2=est2/2;
       // a insalubridade segue a mesma proporção do salário estimado (com o salário informado, ela já vem dentro dele)
@@ -955,7 +959,7 @@ function renderPlanilha(){
       <label>De <input type="text" name="de" data-date="1" inputmode="numeric" value="${S.faltasDe||'01/'+MM+'/'+ANO}" placeholder="DD/MM/AAAA" size="10"></label>
       <label>até <input type="text" name="ate" data-date="1" inputmode="numeric" value="${S.faltasAte||NDIAS+'/'+MM+'/'+ANO}" placeholder="DD/MM/AAAA" size="10"></label>
       <select name="esc" aria-label="Abrangência">${opcoesRel()}</select>
-      <label class="ac-chk" style="font-weight:500"><input type="checkbox" name="at" ${S.faltasAT?'checked':''}> Incluir atestados (AT)</label>
+      <label class="ac-chk" style="font-weight:500"><input type="checkbox" name="at" ${S.faltasAT?'checked':''}> Incluir atestados (AT) e perícias (PE)</label>
       <button class="btn primary" type="submit">Gerar relatório</button><button class="btn" type="button" data-faltasfechar="1">Fechar</button></form>`:''}`;
   if(!fs.length){$('#view').innerHTML=h+`<div class="empty">${S.planObra?'Nenhum funcionário lotado ou com dia trabalhado nesta obra no mês.':'Nenhum funcionário no seu escopo.'}</div></section>`;return}
   h+=`<div class="scroller plan-scroll" id="planScroll"><table class="grid${S.planNomes?'':' compacta'}"><thead><tr><th class="name">Funcionário</th>`;
@@ -971,7 +975,7 @@ function renderPlanilha(){
   if(!S.planNomes){const usadas=new Map();
     for(const f of fs)for(const d in S.ponto[f.id]){const r=S.ponto[f.id][d];if(!CODES[r.c]?.trab)continue;const k=resolve(r.o),nome=OBRAS[k]?.nome||r.o;usadas.set(nome,{s:sigla(nome),cls:empCls(k)})}
     if(usadas.size)siglas=`<div class="legend"><b>Siglas:</b>${[...usadas].sort((a,b)=>a[1].s.localeCompare(b[1].s)).map(([n,x])=>`<span><i class="c-P ${x.cls}">${esc(x.s)}</i>${esc(n)}</span>`).join('')}</div>`}
-  h+=`</tbody></table></div>${siglas}<div class="legend"><span><i class="c-P emp-CONARTE">Obra da CONARTE</i></span><span><i class="c-P emp-ENGEVAC">Obra da ENGEVAC</i></span><span><i class="c-P emp-CIENG">Obra da CIENG</i></span><span><i class="c-P">Obra não vinculada</i></span><span><i class="c-M">½ Obra</i>Meio dia</span><span><i class="c-F">F</i>Falta não justificada</span><span><i class="c-AT">AT</i>Atestado médico</span><span><i class="c-X">X</i>Sábado, domingo, feriado ou falta justificada (motivo na observação)</span>
+  h+=`</tbody></table></div>${siglas}<div class="legend"><span><i class="c-P emp-CONARTE">Obra da CONARTE</i></span><span><i class="c-P emp-ENGEVAC">Obra da ENGEVAC</i></span><span><i class="c-P emp-CIENG">Obra da CIENG</i></span><span><i class="c-P">Obra não vinculada</i></span><span><i class="c-M">½ Obra</i>Meio dia</span><span><i class="c-F">F</i>Falta não justificada</span><span><i class="c-AT">AT</i>Atestado médico</span><span><i class="c-SU">SU</i>Suspensão</span><span><i class="c-PE">PE</i>Perícia (INSS)</span><span><i class="c-X">X</i>Sábado, domingo, feriado ou falta justificada (motivo na observação)</span>
     <span><i class="cell pend" style="width:auto;height:auto;display:inline-block;padding:1px 6px">·</i>Dia obrigatório sem lançamento</span>
     <span><i style="background:var(--accent);width:8px;height:8px;border-radius:50%;padding:0"></i>Nome de obra a vincular</span></div></section>`;
   // a planilha tem rolagem própria: mantém a posição ao lançar um dia
@@ -1043,7 +1047,7 @@ function renderCal(){
     <div class="form-grid">
       <div class="field"><label for="pDe">De</label><select id="pDe" name="de">${Array.from({length:NDIAS},(_,i)=>i+1).map(d=>`<option value="${d}">${dd(d)} ${WD_LONG[dow(d)]}</option>`).join('')}</select></div>
       <div class="field"><label for="pAte">Até</label><select id="pAte" name="ate">${Array.from({length:NDIAS},(_,i)=>i+1).map(d=>`<option value="${d}" ${d===NDIAS?'selected':''}>${dd(d)} ${WD_LONG[dow(d)]}</option>`).join('')}</select></div>
-      <div class="field"><label for="pCod">Lançar</label><select id="pCod" name="cod"><option value="P">Obra (trabalhou)</option><option value="F">F · falta</option><option value="AT">AT · atestado</option><option value="X">X · não trabalhado</option></select></div>
+      <div class="field"><label for="pCod">Lançar</label><select id="pCod" name="cod"><option value="P">Obra (trabalhou)</option><option value="F">F · falta</option><option value="AT">AT · atestado</option><option value="SU">SU · suspensão</option><option value="PE">PE · perícia</option><option value="X">X · não trabalhado</option></select></div>
       <div class="field"><label for="pObra">Obra</label><select id="pObra" name="obra">${Object.values(OBRAS).filter(o=>o.status!=='Concluída').map(o=>`<option ${o.nome===OBRAS[lotacao(f,NDIAS)].nome?'selected':''}>${esc(o.nome)}</option>`).join('')}</select></div>
       <div class="field"><label for="pObs">Observação (opcional)</label><input type="text" id="pObs" name="obs" placeholder="Ex.: férias"></div>
     </div>
@@ -1124,18 +1128,20 @@ function relatorioFaltas(de,ate,escolha,comAT){
   for(const d=new Date(de);d<=ate;d.setDate(d.getDate()+1)){
     const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),p=pontoComp(k);
     if(!p){semDados.add(MESES_LONGO[d.getMonth()]+'/'+d.getFullYear());continue}
-    for(const f of fs){const r=p[f.id]?.[d.getDate()];if(r&&(r.c==='F'||(comAT&&r.c==='AT')))(reg[f.id]=reg[f.id]||[]).push({data:fmtData(d).slice(0,5),c:r.c,obs:r.obs||''})}
+    // suspensões entram sempre; perícias junto com os atestados
+    for(const f of fs){const r=p[f.id]?.[d.getDate()];if(r&&(r.c==='F'||r.c==='SU'||(comAT&&(r.c==='AT'||r.c==='PE'))))(reg[f.id]=reg[f.id]||[]).push({data:fmtData(d).slice(0,5),c:r.c,obs:r.obs||''})}
   }
-  const linhas=fs.filter(f=>reg[f.id]).map(f=>({f,its:reg[f.id],nF:reg[f.id].filter(x=>x.c==='F').length,nAT:reg[f.id].filter(x=>x.c==='AT').length}))
-    .sort((a,b)=>b.nF-a.nF||b.nAT-a.nAT||a.f.nome.localeCompare(b.f.nome));
+  const conta=(x,c)=>x.filter(i=>i.c===c).length;
+  const linhas=fs.filter(f=>reg[f.id]).map(f=>({f,its:reg[f.id],nF:conta(reg[f.id],'F'),nSU:conta(reg[f.id],'SU'),nAT:conta(reg[f.id],'AT'),nPE:conta(reg[f.id],'PE')}))
+    .sort((a,b)=>b.nF-a.nF||b.nSU-a.nSU||b.nAT-a.nAT||a.f.nome.localeCompare(b.f.nome));
   const E=EMPRESAS[tipo==='emp'?val:tipo==='obra'?OBRAS[val]?.empresa:'CONARTE']||{};
-  const dias=x=>x.its.map(i=>`${i.data}${i.c==='AT'?' (AT)':''}${i.obs?` <span class="sub">${esc(i.obs)}</span>`:''}`).join(', ');
-  const corpo=linhas.map(x=>`<tr><td><b>${esc(x.f.nome)}</b><br><span class="sub">${esc(x.f.funcao)} · ${empresaDe(x.f)} · ${esc(OBRAS[lotacao(x.f,NDIAS)]?.nome||'—')}</span></td><td>${x.nF}</td>${comAT?`<td>${x.nAT}</td>`:''}<td style="text-align:left;white-space:normal">${dias(x)}</td></tr>`).join('');
+  const dias=x=>x.its.map(i=>`${i.data}${i.c!=='F'?` (${i.c})`:''}${i.obs?` <span class="sub">${esc(i.obs)}</span>`:''}`).join(', ');
+  const corpo=linhas.map(x=>`<tr><td><b>${esc(x.f.nome)}</b><br><span class="sub">${esc(x.f.funcao)} · ${empresaDe(x.f)} · ${esc(OBRAS[lotacao(x.f,NDIAS)]?.nome||'—')}</span></td><td>${x.nF}</td><td>${x.nSU}</td>${comAT?`<td>${x.nAT}</td><td>${x.nPE}</td>`:''}<td style="text-align:left;white-space:normal">${dias(x)}</td></tr>`).join('');
   const periodo=`${fmtData(de)} a ${fmtData(ate)}`;
-  janelaRelatorio({titulo:`Relatório de faltas · ${titulo}`,meta:`Período ${periodo} · ${linhas.length} funcionário(s) com ${comAT?'faltas ou atestados':'faltas'}`,logo:E.logo,
-    tabela:`<table><thead><tr><th>Funcionário</th><th>Faltas (F)</th>${comAT?'<th>Atestados (AT)</th>':''}<th style="text-align:left">Dias</th></tr></thead><tbody>${corpo||`<tr><td colspan="${comAT?4:3}">Nenhuma ${comAT?'falta ou atestado':'falta'} no período.</td></tr>`}</tbody>
-      <tfoot><tr><td>Total</td><td>${linhas.reduce((s,x)=>s+x.nF,0)}</td>${comAT?`<td>${linhas.reduce((s,x)=>s+x.nAT,0)}</td>`:''}<td></td></tr></tfoot></table>`,
-    nota:`Faltas = dias marcados F (falta não justificada) no ponto. ${comAT?'Atestados = dias marcados AT. ':''}Faltas justificadas lançadas como X não entram.${semDados.size?` <b>Atenção: sem ponto lançado no sistema em ${[...semDados].join(', ')}; esses dias não foram considerados.</b>`:''}`});
+  janelaRelatorio({titulo:`Relatório de faltas · ${titulo}`,meta:`Período ${periodo} · ${linhas.length} funcionário(s) com ${comAT?'faltas, suspensões, atestados ou perícias':'faltas ou suspensões'}`,logo:E.logo,
+    tabela:`<table><thead><tr><th>Funcionário</th><th>Faltas (F)</th><th>Suspensões (SU)</th>${comAT?'<th>Atestados (AT)</th><th>Perícias (PE)</th>':''}<th style="text-align:left">Dias</th></tr></thead><tbody>${corpo||`<tr><td colspan="${comAT?6:4}">Nenhuma ${comAT?'falta, suspensão, atestado ou perícia':'falta ou suspensão'} no período.</td></tr>`}</tbody>
+      <tfoot><tr><td>Total</td>${['nF','nSU',...(comAT?['nAT','nPE']:[])].map(k=>`<td>${linhas.reduce((s,x)=>s+x[k],0)}</td>`).join('')}<td></td></tr></tfoot></table>`,
+    nota:`Faltas = dias marcados F (falta não justificada) no ponto. Suspensões = dias marcados SU. ${comAT?'Atestados = dias marcados AT; perícias = dias marcados PE. ':''}Faltas justificadas lançadas como X não entram.${semDados.size?` <b>Atenção: sem ponto lançado no sistema em ${[...semDados].join(', ')}; esses dias não foram considerados.</b>`:''}`});
 }
 // Abre um relatório pronto para imprimir numa aba própria (cabeçalho com logo, tabela e nota)
 function janelaRelatorio({titulo,meta,logo,tabela,nota,deitado}){
@@ -1753,13 +1759,13 @@ function modalRecibos(titulo,sub,out,refresh){
 }
 function recibosFicha(f){
   const dp=S.perfil==='dp',st=stDe(f),pode=dp&&st!=='fechado'&&st!=='aguardando',p=S.ponto[f.id],c=calc(f);
-  let tAv=0,tMen=0,nF=0,nAT=0,nX=0;
-  for(const d in p){const x=p[d];if(CODES[x.c].trab){if(vincDia(f,+d)==='avulso')tAv+=CODES[x.c].peso;else tMen+=CODES[x.c].peso}else if(x.c==='F')nF++;else if(x.c==='AT')nAT++;else nX++}
+  let tAv=0,tMen=0,nF=0,nAT=0,nX=0,nSU=0,nPE=0;
+  for(const d in p){const x=p[d];if(CODES[x.c].trab){if(vincDia(f,+d)==='avulso')tAv+=CODES[x.c].peso;else tMen+=CODES[x.c].peso}else if(x.c==='F')nF++;else if(x.c==='AT')nAT++;else if(x.c==='SU')nSU++;else if(x.c==='PE')nPE++;else nX++}
   const pend=pendF(f).length,nv=nvF(f);
   const card=(t,v,cls='')=>`<div class="ac-card ${cls}"><span class="hint">${t}</span><b class="num">${v}</b></div>`;
   let h=`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Ponto de ${MES_NOME}</h3><button class="btn" data-govcal="${f.id}">Abrir calendário</button></div><div class="ac-cards">
     ${temAvulso(f)?card('Dias como avulso',nfmt(tAv)):''}${f.vh.some(x=>x.vinc==='mensalista')?card('Dias como mensalista',nfmt(tMen)):''}
-    ${card('Faltas (F)',nF,nF?'':'off')}${card('Atestados (AT)',nAT,nAT?'':'off')}${card('Dias X',nX,'off')}${card('Dias sem lançamento',pend,pend?'':'off')}</div>`;
+    ${card('Faltas (F)',nF,nF?'':'off')}${card('Atestados (AT)',nAT,nAT?'':'off')}${nSU?card('Suspensões (SU)',nSU):''}${nPE?card('Perícias (PE)',nPE):''}${card('Dias X',nX,'off')}${card('Dias sem lançamento',pend,pend?'':'off')}</div>`;
   const blocos=[];let total=0,nSel=0;
   // caixinha para juntar este recibo numa impressão só (só para recibos já emitidos)
   const sel=tipo=>dp?(nSel++,`<label class="ac-chk rsel-lbl"><input type="checkbox" class="rsel" data-f="${f.id}" value="${tipo}"> Imprimir</label>`):'';
@@ -2022,7 +2028,7 @@ function drawEditor(err){
   const textos=[...new Set(Object.values(S.ponto).flatMap(p=>Object.values(p).map(x=>x.o).filter(Boolean)))];
   $('#modal').innerHTML=`<div class="overlay" id="ov"><form class="editor" id="edForm" aria-label="Lançar dia">
    <div><h2>${esc(f.nome)}</h2><span class="hint">${WD_LONG[dow(d)]}, ${dd(d)}/${ANO} · ${obrig(d)?'dia obrigatório':'fim de semana'}${ED.prev?' · lançado: '+CODES[ED.prev.c].l:' · Não informado'}</span></div>
-   <div class="codes">${['P','F','AT','X'].map(k=>`<button type="button" class="c-${k}" data-code="${k}" aria-pressed="${k==='P'?!!trab:ED.c===k}"><b>${k==='P'?'Obra':k}</b>${k==='P'?'Trabalhou':CODES[k].l}</button>`).join('')}
+   <div class="codes">${['P','F','AT','SU','PE','X'].map(k=>`<button type="button" class="c-${k}" data-code="${k}" aria-pressed="${k==='P'?!!trab:ED.c===k}"><b>${k==='P'?'Obra':k}</b>${k==='P'?'Trabalhou':CODES[k].l}</button>`).join('')}
      <button type="button" class="none" data-code="" aria-pressed="${!ED.c}"><b>—</b>Não informado</button></div>
    ${trab?`<div class="field"><label for="edObra">Obra do dia (digitação livre)</label><input type="text" id="edObra" list="dlObras" value="${esc(ED.o)}" autocomplete="off">
      <datalist id="dlObras">${textos.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
