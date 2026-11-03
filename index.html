@@ -700,15 +700,19 @@ function renderSalarios(){
     </tbody></table></div></div></section>`;
   $('#view').innerHTML=h;
 }
+// Insalubridade por obra: % sobre o salário mínimo, para todas as funções menos as marcadas na obra
+const SAL_MIN=1621;
+const insalTxt=o=>o?.insal?`insalubridade ${nfmt2(o.insal.pct).replace(/,00$/,'')}% de ${brl(o.insal.base)} = ${brl(o.insal.base*o.insal.pct/100)}${o.insal.exceto?.length?' · exceto '+o.insal.exceto.join(', '):''}`:'sem insalubridade';
+const insalDe=(k,f)=>{const o=OBRAS[k];if(!o?.insal||(o.insal.exceto||[]).some(x=>norm(x)===norm(f.funcao)))return 0;return o.insal.base*o.insal.pct/100};
 // ---------- Custo por obra ----------
 const prevKey=()=>{let a=ANO,m=MES-1;if(m<0){m=11;a--}return a+'-'+String(m+1).padStart(2,'0')};
-const CUSTO_COLS=[['diarias','Diárias'],['sal1','Salário 1ª quinzena'],['sal2','Salário 2ª quinzena'],['bonif','Bonificação'],['ajuda','Ajuda de custo'],['cafe','Auxílio café'],['alim','Alimentação'],['transp','Passagens'],['cesta','Cesta básica'],['guias','INSS/FGTS']];
+const CUSTO_COLS=[['diarias','Diárias'],['sal1','Salário 1ª quinzena'],['sal2','Salário 2ª quinzena'],['insal','Insalubridade'],['bonif','Bonificação'],['ajuda','Ajuda de custo'],['cafe','Auxílio café'],['alim','Alimentação'],['transp','Passagens'],['cesta','Cesta básica'],['guias','INSS/FGTS']];
 function custoFunc(f,guia=0){
   const E=EMPRESAS[empresaDe(f)]||{},A=acordo(f),c=calc(f),p=S.ponto[f.id];
   const r={};let totM=0;
   for(const d in p){const x=p[d];if(!CODES[x.c]?.trab)continue;const k=resolve(x.o)||('?'+x.o);r[k]=r[k]||{m:0,a:0};
     if(vincDia(f,+d)==='avulso')r[k].a+=CODES[x.c].peso;else{r[k].m+=CODES[x.c].peso;totM+=CODES[x.c].peso}}
-  const it={sal1:0,sal2:0,bonif:0,ajuda:0,cafe:0,alim:0,transp:0,cesta:0,guias:0};let est=false,estSal=false;
+  const it={sal1:0,sal2:0,insal:0,bonif:0,ajuda:0,cafe:0,alim:0,transp:0,cesta:0,guias:0};let est=false,estSal=false,fatorIns=0;
   const m=f.vh.find(x=>x.vinc==='mensalista');
   if(m){
     const ini=Math.max(m.de,admDia(f));
@@ -716,7 +720,9 @@ function custoFunc(f,guia=0){
     if(pago>0){it.sal1=+fo.q1||0;it.sal2=+fo.q2||0}
     else if(A.salario&&ini<=NDIAS){estSal=true;const nF=Object.entries(p).filter(([d,x])=>+d>=ini&&x.c==='F').length;
       // estimativa sem folha: metade em cada quinzena
-      const diasVinc=ini<=1?30:Math.min(30,NDIAS-ini+1),est2=A.salario/30*Math.max(0,diasVinc-nF)*(1+(+E.encargos||0)/100);it.sal1=it.sal2=est2/2}
+      const diasVinc=ini<=1?30:Math.min(30,NDIAS-ini+1),est2=A.salario/30*Math.max(0,diasVinc-nF)*(1+(+E.encargos||0)/100);it.sal1=it.sal2=est2/2;
+      // a insalubridade segue a mesma proporção do salário estimado (com o salário informado, ela já vem dentro dele)
+      fatorIns=Math.max(0,diasVinc-nF)/30*(1+(+E.encargos||0)/100)}
     if(c.itens.bonif)it.bonif=c.itens.bonif.valor;
     // verbas referentes a este mês: adiantamento/cesta do registro, ou fechamento do mês anterior
     if(diaEntrada(f)){const a=calcAdiant(f);if(a&&f.adiantQuando)for(const x of a.itens)it[x.k]+=x.valor;if(temCestaReg(f))it.cesta+=valorCesta(f)}
@@ -726,7 +732,8 @@ function custoFunc(f,guia=0){
   }
   it.guias=guia;
   const dia=f.diaria||DIARIAS[f.funcao]||0,out={};
-  for(const [k,v] of Object.entries(r)){out[k]={dias:v.m+v.a,diarias:v.a*dia};for(const x in it)out[k][x]=totM?it[x]*v.m/totM:0}
+  for(const [k,v] of Object.entries(r)){out[k]={dias:v.m+v.a,diarias:v.a*dia};for(const x in it)out[k][x]=totM?it[x]*v.m/totM:0;
+    out[k].insal=totM&&fatorIns?insalDe(k,f)*fatorIns*v.m/totM:0}
   if(!totM&&Object.values(it).some(x=>x>0)){out._sem={dias:0,diarias:0,...it}}
   return {out,est,estSal,sal:it.sal1+it.sal2};
 }
@@ -756,6 +763,7 @@ function renderCusto(){
   h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${CUSTO_COLS.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}<td>${brl(tot.tot)}</td></tr></tfoot></table></div>
     <div class="legend"><span>Custo atribuído à obra onde o funcionário trabalhou, na proporção dos dias. Diárias vão direto para a obra do dia.</span>
     <span>Salário: valor líquido pago em cada quinzena (aba Salários); no detalhe da obra aparecem o dia e a conta do pagamento. Sem valor informado, usa a estimativa (metade em cada quinzena): </span><span>mês completo = salário cheio; quem entrou no mês = salário ÷ 30 × dias desde o registro; menos salário ÷ 30 por falta (F); mais encargos da empresa (aba Empresas).</span>
+    <span>Insalubridade: só entra quando o salário é estimado, na obra com insalubridade cadastrada (aba Obras), proporcional aos dias na obra. Com o salário líquido informado, ela já está dentro dele.</span>
     <span>Ajuda de custo, café, alimentação, passagens e cesta entram no mês a que se referem: vêm do fechamento de ${compLab(prevKey())} ou do registro deste mês.</span>
     ${algumEst?'<span><span class="tag">benefícios estimados</span> mês anterior ainda não fechado no sistema: valores tirados do acordo.</span>':''}${algumEstSal?'<span><span class="tag">salário estimado</span> preencha a aba Salários com o líquido pago.</span>':''}
     <span>Cesta básica pelo valor cadastrado na aba Empresas.</span><span>INSS/FGTS: guias informadas na aba Salários (opcional), divididas entre os funcionários da empresa pelo salário e depois pelas obras.</span></div></section>`;
@@ -1429,16 +1437,21 @@ function renderObras(){
        <div class="field"><label for="oResp">Responsável (gestor da obra)</label><input type="text" id="oResp" name="resp" value="${v('resp')}"></div>
        <div class="field"><label for="oIni">Início</label><input type="text" id="oIni" name="inicio" data-date="1" inputmode="numeric" value="${v('inicio')}" placeholder="DD/MM/AAAA"></div>
        <div class="field"><label for="oFim">Previsão de término</label><input type="text" id="oFim" name="fim" data-date="1" inputmode="numeric" value="${v('fim')}" placeholder="DD/MM/AAAA"></div>
+       <div class="field"><label for="oInsPct">Insalubridade (% do salário mínimo)</label><input type="text" id="oInsPct" name="insPct" inputmode="decimal" value="${o.insal?nfmt2(o.insal.pct):''}" placeholder="Vazio = sem insalubridade"></div>
+       <div class="field"><label for="oInsBase">Salário mínimo usado (R$)</label><input type="text" id="oInsBase" name="insBase" inputmode="decimal" value="${nfmt2(o.insal?.base||SAL_MIN)}"></div>
        ${S.obraEdit?`<div class="field"><label for="oSt">Situação</label><select id="oSt" name="status">${['Em andamento','Paralisada','Concluída'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}</select></div>
        <div class="field"><label for="oMot">Motivo da alteração (obrigatório)</label><input type="text" id="oMot" name="motivo" placeholder="Ex.: nome corrigido conforme contrato"></div>`:''}
       </div>
+      <details ${o.insal?.exceto?.length?'open':''}><summary class="hint">Funções sem insalubridade nesta obra${o.insal?.exceto?.length?': '+o.insal.exceto.map(esc).join(', '):''}</summary>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px">${Object.keys(DIARIAS).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>`<label class="hint" style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="insExc" value="${esc(n)}" ${(o.insal?.exceto||[]).some(x=>norm(x)===norm(n))?'checked':''}> ${esc(n)}</label>`).join('')}</div></details>
+      <p class="hint" style="margin:0">Insalubridade: entra no custo de quem trabalhar nesta obra, proporcional aos dias, exceto nas funções marcadas acima.</p>
       <p class="hint" style="margin:0">${S.obraEdit?'Se o nome mudar, o nome antigo continua reconhecido nos lançamentos já feitos e nos novos.':'A cidade define os feriados municipais da obra. O código é gerado pelo sistema.'}</p>
       <div id="formErr" class="err"></div>
       <div class="actions"><button class="btn primary" type="submit">${S.obraEdit?'Salvar alterações':'Cadastrar obra'}</button><button class="btn" type="button" data-obracancel="1">Cancelar</button></div></form></div>`;
   }
   h+=`<div class="scroller"><table class="ben"><thead><tr><th>Obra</th><th style="text-align:left">Empresa</th><th style="text-align:left">Cidade</th><th style="text-align:left">Responsável</th><th>Início</th><th>Término previsto</th><th style="text-align:left">Nomes digitados reconhecidos</th><th>Em ${MES_NOME}</th>${dp?'<th></th>':''}</tr></thead><tbody>
     ${Object.entries(OBRAS).map(([k,o])=>{const ap=Object.entries(S.apelidos).filter(([,v])=>v===k).map(([t])=>t);const u=uso[k];
-      return `<tr class="obra-row ${empCls(k)}-bar"><td><b>${esc(o.nome)}</b><br><span class="hint">${o.cod} · ${esc(o.status)}</span></td><td style="text-align:left;font-family:var(--f-body)"><span class="emp-chip ${empCls(k)}">${o.empresa}</span></td><td style="text-align:left;font-family:var(--f-body)">${esc(o.cidade)}/${esc(o.uf)}</td><td style="text-align:left;font-family:var(--f-body)">${esc(o.resp)}</td><td>${esc(o.inicio)}</td><td>${esc(o.fim)}</td>
+      return `<tr class="obra-row ${empCls(k)}-bar"><td><b>${esc(o.nome)}</b><br><span class="hint">${o.cod} · ${esc(o.status)}</span>${o.insal?`<br><span class="tag" style="white-space:normal">${esc(insalTxt(o))}</span>`:''}</td><td style="text-align:left;font-family:var(--f-body)"><span class="emp-chip ${empCls(k)}">${o.empresa}</span></td><td style="text-align:left;font-family:var(--f-body)">${esc(o.cidade)}/${esc(o.uf)}</td><td style="text-align:left;font-family:var(--f-body)">${esc(o.resp)}</td><td>${esc(o.inicio)}</td><td>${esc(o.fim)}</td>
         <td style="text-align:left;white-space:normal;font-family:var(--f-body)">${ap.map(t=>`<span class="tag" style="background:var(--surface-2);color:var(--muted);margin:1px">${esc(t)}</span>`).join(' ')}</td>
         <td>${u?`${nfmt(u.dias)} dias · ${u.func.size} func.`:'—'}</td>${dp?`<td><button class="btn" data-obraedit="${k}">Editar</button></td>`:''}</tr>`}).join('')}
     </tbody></table></div>
@@ -1571,18 +1584,22 @@ $('#view').addEventListener('submit',e=>{
     if(g('nome').length<3)return err('Informe o nome da obra.');
     if(!g('cidade'))return err('Informe a cidade: ela define os feriados municipais.');
     if(Object.entries(OBRAS).some(([k,o])=>k!==S.obraEdit&&norm(o.nome)===norm(g('nome'))))return err('Já existe uma obra com esse nome.');
+    const insPct=g('insPct')?parseBRL(g('insPct')):0,insBase=parseBRL(g('insBase')||'');
+    if(!(insPct>=0&&insPct<=100))return err('Informe a insalubridade em % (ex.: 30) ou deixe vazio.');
+    if(insPct>0&&!(insBase>0))return err('Informe o salário mínimo usado na insalubridade.');
+    const insal=insPct>0?{pct:insPct,base:insBase,exceto:[...fm.querySelectorAll('[name=insExc]:checked')].map(c=>c.value)}:null;
     if(S.obraEdit){
       if(g('motivo').length<4)return err('Escreva o motivo da alteração.');
-      const id=S.obraEdit,o=OBRAS[id],antes=`${o.nome} · ${o.cidade}/${o.uf} · ${o.status}`;
-      Object.assign(o,{nome:g('nome'),empresa:g('empresa'),cidade:g('cidade'),uf:g('uf').toUpperCase(),resp:g('resp')||'—',inicio:g('inicio')||'—',fim:g('fim')||'—',status:g('status')});
+      const id=S.obraEdit,o=OBRAS[id],antes=`${o.nome} · ${o.cidade}/${o.uf} · ${o.status} · ${insalTxt(o)}`;
+      Object.assign(o,{nome:g('nome'),empresa:g('empresa'),cidade:g('cidade'),uf:g('uf').toUpperCase(),resp:g('resp')||'—',inicio:g('inicio')||'—',fim:g('fim')||'—',status:g('status'),insal});
       S.apelidos[norm(o.nome)]=id;S.obraEdit=null;
-      registrar(`Obra ${o.cod}`,antes,`${o.nome} · ${o.cidade}/${o.uf} · ${o.status}`,g('motivo'));
+      registrar(`Obra ${o.cod}`,antes,`${o.nome} · ${o.cidade}/${o.uf} · ${o.status} · ${insalTxt(o)}`,g('motivo'));
       render();return toast(`Obra ${o.cod} atualizada.`);
     }
     const id='o'+Date.now(),cod='OB-'+String(20+Object.keys(OBRAS).length).padStart(3,'0');
-    OBRAS[id]={cod,nome:g('nome'),empresa:g('empresa'),cidade:g('cidade'),uf:g('uf').toUpperCase(),resp:g('resp')||'—',inicio:g('inicio')||'—',fim:g('fim')||'—',status:'Em andamento'};
+    OBRAS[id]={cod,nome:g('nome'),empresa:g('empresa'),cidade:g('cidade'),uf:g('uf').toUpperCase(),resp:g('resp')||'—',inicio:g('inicio')||'—',fim:g('fim')||'—',status:'Em andamento',insal};
     S.apelidos[norm(g('nome'))]=id;S.obraNova=false;
-    registrar(`Obra ${cod}`,'—',`Cadastrada: ${g('nome')} · ${g('cidade')}/${g('uf').toUpperCase()}`,'Nova obra');
+    registrar(`Obra ${cod}`,'—',`Cadastrada: ${g('nome')} · ${g('cidade')}/${g('uf').toUpperCase()}${insal?' · '+insalTxt(OBRAS[id]):''}`,'Nova obra');
     render();return toast(`Obra ${cod} cadastrada. Ela já aparece como sugestão no lançamento do ponto.`);
   }
   if(fm.id==='vincForm'){
