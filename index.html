@@ -585,26 +585,29 @@ const exigeDia=(f,d)=>obrig(d)&&d>=admDia(f)&&vincDia(f,d)!=='avulso';
 // Férias, perícia e suspensão programadas: período de datas (pode passar de um mês para o outro).
 // Preenche os dias vazios do mês aberto (dias corridos, com fins de semana e feriados); o restante entra quando o mês seguinte for aberto.
 const AG_COD=['FE','PE','SU'];
-function aplicarAgenda(f,item){
+// o X de sábado, domingo ou feriado é só "não trabalhado": férias, perícia e suspensão (dias corridos) passam por cima dele
+const livreParaAfast=(f,d)=>{const r=S.ponto[f.id][d];return !r||(r.c==='X'&&!obrig(d))};
+function aplicarAgenda(f,item,denovo){
   const k=ANO*12+MES,r={n:0,ocup:0};
   for(const a of item?[item]:(f.agenda||[])){
     const de=lerData(a.de),ate=lerData(a.ate);if(!de||!ate)continue;
     const ki=de.getFullYear()*12+de.getMonth(),kf=ate.getFullYear()*12+ate.getMonth();
-    if(k<ki||k>kf||(a.feitos||{})[COMP])continue;
+    if(k<ki||k>kf||((a.feitos||{})[COMP]&&!denovo))continue;
     const d0=k===ki?de.getDate():1,d1=k===kf?ate.getDate():NDIAS;
     for(let d=d0;d<=d1;d++){if(d<admDia(f)||!podeEditar(f,d))continue;
-      if(S.ponto[f.id][d]){if(S.ponto[f.id][d].c!==a.c)r.ocup++;continue}
+      if(!livreParaAfast(f,d)){if(S.ponto[f.id][d].c!==a.c)r.ocup++;continue}
       S.ponto[f.id][d]={c:a.c,o:'',obs:a.obs||CODES[a.c].l};r.n++}
     (a.feitos=a.feitos||{})[COMP]=true;
   }
   return r;
 }
+const agNoMes=a=>{const de=lerData(a.de),ate=lerData(a.ate),k=ANO*12+MES;return !!de&&!!ate&&k>=de.getFullYear()*12+de.getMonth()&&k<=ate.getFullYear()*12+ate.getMonth()};
 function agendaHTML(f){
   const dp=S.perfil==='dp',ls=(f.agenda||[]).slice().sort((a,b)=>lerData(a.de)-lerData(b.de));
   let h=`<h3 class="sub">Férias, perícia ou suspensão programadas</h3>`;
   h+=ls.length?`<div class="lemb-lista">${ls.map(a=>`<div class="lemb"><span><span class="code c-${a.c}" style="padding:1px 6px;border-radius:4px">${a.c}</span> <b>${CODES[a.c].l}</b> de <b class="num">${esc(a.de)}</b> a <b class="num">${esc(a.ate)}</b>${a.obs?' · '+esc(a.obs):''}
       <br><span class="hint">Preenchido em: ${Object.keys(a.feitos||{}).sort().map(compLabel).join(', ')||'ainda não (o mês não foi aberto)'}</span></span>
-      ${dp?`<button class="btn" data-agdel="${f.id}:${a.id}">Apagar</button>`:''}</div>`).join('')}</div>`:`<p class="hint" style="margin:0">Nenhum período programado.</p>`;
+      ${dp?`<span style="display:flex;gap:6px">${agNoMes(a)?`<button class="btn" data-agrefaz="${f.id}:${a.id}" title="Preenche de novo os dias vazios e os X de fim de semana e feriado deste mês">Preencher de novo</button>`:''}<button class="btn" data-agdel="${f.id}:${a.id}">Apagar</button></span>`:''}</div>`).join('')}</div>`:`<p class="hint" style="margin:0">Nenhum período programado.</p>`;
   if(dp)h+=`<form id="agForm" class="lemb-form" data-f="${f.id}"><div class="field"><label for="agCod">Tipo</label><select id="agCod" name="cod">${AG_COD.map(c=>`<option value="${c}">${c} · ${CODES[c].l}</option>`).join('')}</select></div>
       <div class="field"><label for="agDe">De</label><input type="text" id="agDe" name="de" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA"></div>
       <div class="field"><label for="agAte">Até</label><input type="text" id="agAte" name="ate" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA"></div>
@@ -1101,7 +1104,7 @@ function renderCal(){
       <div class="field"><label for="pObra">Obra</label><select id="pObra" name="obra">${Object.values(OBRAS).filter(o=>o.status!=='Concluída').map(o=>`<option ${o.nome===OBRAS[lotacao(f,NDIAS)].nome?'selected':''}>${esc(o.nome)}</option>`).join('')}</select></div>
       <div class="field"><label for="pObs">Observação (opcional)</label><input type="text" id="pObs" name="obs" placeholder="Ex.: férias"></div>
     </div>
-    <label class="ac-chk" style="font-weight:500"><input type="checkbox" id="pFds" name="fds"> Incluir sábados, domingos e feriados</label>
+    <label class="ac-chk" style="font-weight:500"><input type="checkbox" id="pFds" name="fds"> Incluir sábados, domingos e feriados <span class="hint" style="font-weight:400">(férias, perícia e suspensão já incluem sempre)</span></label>
     <div id="formErr" class="err"></div>
     <div class="actions" style="margin:0"><button class="btn primary" type="submit">Lançar nos dias vazios</button></div></form>`:''}
   ${S.perfil==='dp'?`<div style="margin:0 14px 16px">${agendaHTML(f)}</div>`:''}</section>`;
@@ -1627,7 +1630,9 @@ $('#view').addEventListener('submit',e=>{
     if(ate<de)return err('O dia final precisa ser depois do inicial.');
     let n=0;
     let parouTeste=false;
-    for(let d=de;d<=ate;d++){if(!fm.fds.checked&&(isWE(d)||FERIADOS_AGO[d]))continue;if(S.ponto[f.id][d]||!podeEditar(f,d))continue;
+    // férias, perícia e suspensão contam em dias corridos: entram também nos fins de semana e feriados (por cima do X)
+    const corrido=AG_COD.includes(cod);
+    for(let d=de;d<=ate;d++){if(!corrido&&!fm.fds.checked&&(isWE(d)||FERIADOS_AGO[d]))continue;if((corrido?!livreParaAfast(f,d):S.ponto[f.id][d])||!podeEditar(f,d))continue;
 
       S.ponto[f.id][d]={c:cod,o:cod==='P'?fm.obra.value:''};if(obs)S.ponto[f.id][d].obs=obs;n++}
     parouTeste=noLimite(f);
@@ -2229,6 +2234,10 @@ $('#view').addEventListener('click',e=>{
   if(vb){S.vincEdit=!!vb.dataset.vincedit;S.cadEdit=false;render();if(S.vincEdit)$('#vincForm')?.scrollIntoView({block:'center'});return}
   const oe=e.target.closest('[data-outraemp]');
   if(oe){const f=byId(oe.dataset.outraemp);S.empresa=empresaDe(f);$('#selEmp').value=S.empresa;S.cadSel=f.id;S.cadEdit=false;render();return toast(`${f.nome} está na ${S.empresa}.`)}
+  const agr=e.target.closest('[data-agrefaz]');
+  if(agr){const [id,aid]=agr.dataset.agrefaz.split(':'),f=byId(id),a=f?.agenda?.find(x=>x.id===aid);if(!a)return;
+    const r=aplicarAgenda(f,a,true);registrar(`${CODES[a.c].l} programada · ${f.nome}`,`${a.de} a ${a.ate}`,`${r.n} dia(s) preenchidos de novo em ${MES_NOME}`,'Período programado');render();
+    return toast(r.n?`${r.n} dia(s) preenchidos com ${a.c}.${r.ocup?` ${r.ocup} dia(s) com outro lançamento não mudaram.`:''}`:`Nada a preencher: os dias deste mês já estão lançados.${r.ocup?` ${r.ocup} dia(s) têm outro lançamento.`:''}`)}
   const ag=e.target.closest('[data-agdel]');
   if(ag){const [id,aid]=ag.dataset.agdel.split(':'),f=byId(id),a=f?.agenda?.find(x=>x.id===aid);if(!a)return;
     if(!confirm(`Apagar o período programado de ${CODES[a.c].l.toLowerCase()} de ${a.de} a ${a.ate}?\n\nOs dias já preenchidos no ponto continuam; para tirá-los, corrija no calendário.`))return;
