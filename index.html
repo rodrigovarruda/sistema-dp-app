@@ -843,6 +843,8 @@ function renderEmpresas(){
     </tbody></table></div></div></section>`;
   $('#view').innerHTML=h;
 }
+// ligado pelo gerador do arquivo oficial ("Sistema DP.html"): esconde e bloqueia apagar tudo, restaurar cópia e voltar ao exemplo
+const OFICIAL=true;
 const naFrame=(()=>{try{return window.self!==window.top}catch(e){return true}})();
 const btnImprimir=()=>naFrame?'<span class="hint">Para imprimir, abra o arquivo no computador</span>':'<button class="btn primary" id="recImprimir">Imprimir / salvar PDF</button>';
 document.addEventListener('click',e=>{
@@ -921,11 +923,15 @@ function renderDemo(){
   const b=$('#demoBar');
   if(!S.persist){b.innerHTML=`<b>Prévia de demonstração.</b> <span>Dados fictícios. As alterações somem ao recarregar.</span>
     <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${S.confZerar?escolhaComp()+'<button class="btn primary" data-zerarok="1">Começar</button><button class="btn" data-zerarnao="1">Cancelar</button>':'<button class="btn" data-zerar="1">Começar do zero</button>'+(naFrame?'':'<label class="btn" style="cursor:pointer">Restaurar cópia<input type="file" accept=".json,application/json" data-restaurar="1" hidden></label>')}</span>`;}
+  // sistema oficial: dados reais na nuvem; só a cópia de segurança (apagar, restaurar e exemplo sobrescreveriam a nuvem)
+  else if(OFICIAL)b.innerHTML=`<b>Dados na nuvem.</b> <span>Tudo o que é lançado fica salvo e aparece para todos. De vez em quando, salve uma cópia de segurança.</span>
+    <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${naFrame?'':'<button class="btn" data-backup="1">Salvar cópia de segurança</button>'}</span>`;
   else b.innerHTML=`<b>Modo teste.</b> <span>Começou do zero. Seus dados ficam salvos neste navegador.</span>
     <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${S.confZerar?escolhaComp()+`<button class="btn primary" data-zerarok="1">Confirmar: apagar tudo</button><button class="btn" data-zerarnao="1">Cancelar</button>`:`<button class="btn" data-zerar="1">Apagar tudo e recomeçar</button>`}${naFrame?'':'<button class="btn" data-backup="1">Salvar cópia de segurança</button><label class="btn" style="cursor:pointer">Restaurar cópia<input type="file" accept=".json,application/json" data-restaurar="1" hidden></label>'}<button class="btn" data-exemplo="1">Voltar ao exemplo</button></span>`;
 }
-document.getElementById('demoBar').addEventListener('change',e=>{if(e.target.matches('[data-restaurar]')&&e.target.files[0])restaurarBackup(e.target.files[0])});
+document.getElementById('demoBar').addEventListener('change',e=>{if(e.target.matches('[data-restaurar]')&&e.target.files[0]&&!OFICIAL)restaurarBackup(e.target.files[0])});
 document.getElementById('demoBar').addEventListener('click',e=>{
+  if(OFICIAL&&!e.target.closest('[data-backup]'))return;
   if(e.target.closest('[data-zerar]')){S.confZerar=true;renderDemo();return}
   if(e.target.closest('[data-zerarok]')){const [a,m]=$('#zComp').value.split('-').map(Number);try{localStorage.removeItem(LS)}catch(x){}zerar(a,m);return}
   if(e.target.closest('[data-zerarnao]')){S.confZerar=false;renderDemo();return}
