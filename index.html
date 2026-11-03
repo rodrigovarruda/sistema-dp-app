@@ -1,4 +1,4 @@
-<title>TESTE · Sistema DP Conarte</title>
+<title>Sistema DP Conarte</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -347,7 +347,6 @@ table.ben th,table.ben td{padding-inline:8px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
 
-<div style="background:#b4232a;color:#fff;text-align:center;font-weight:700;padding:6px 16px;letter-spacing:.03em">AMBIENTE DE TESTE · separado do piloto · não use para pagamentos reais</div>
 <div class="topbar"><div class="topbar-in">
 <header class="top">
     <div class="brand"><img id="hdrLogo" alt="Logomarca" hidden><div><h1>Sistema DP</h1><span>Departamento Pessoal</span></div></div>
@@ -2345,7 +2344,7 @@ function nvOuvir(){
   setInterval(async()=>{try{const {data}=await NV.cli.from('estado').select('versao').eq('id',NUVEM.id).maybeSingle();if(data&&data.versao>NV.versao)nvChegou()}catch(e){}},30000);
 }
 function nvTelaLogin(msg,email=''){
-  nvTela(`<form class="panel" id="nvForm"><div><h2>Entrar no Sistema DP</h2><span class="hint">${NUVEM.id==='teste'?'Ambiente de TESTE · ':''}Use o seu e-mail e a sua senha.</span></div>
+  nvTela(`<form class="panel" id="nvForm"><div><h2>Entrar no Sistema DP</h2><span class="hint">Use o seu e-mail e a sua senha.</span></div>
     <div class="field"><label for="nvEmail">E-mail</label><input type="email" id="nvEmail" autocomplete="username" required value="${esc(email)}"></div>
     <div class="field"><label for="nvSenha">Senha</label><input type="password" id="nvSenha" autocomplete="current-password" required></div>
     ${msg?`<p class="err">${esc(msg)}</p>`:''}<button class="btn primary" type="submit">Entrar</button></form>`);
@@ -2370,7 +2369,7 @@ async function nvEntrou(sess){
     }else{
       NV.versao=row?row.versao:0;NV.ultimo='';
       // a nuvem ainda está vazia: só envia os dados deste computador se a pessoa confirmar
-      if(!row&&S.persist&&!rest&&!confirm(`A nuvem ainda não tem dados${NUVEM.id==='teste'?' do TESTE':''}.\n\nEnviar os dados deste computador (${ALL.length} funcionário(s), competência ${MES_NOME})?\n\nIsso deve ser feito só uma vez, no computador com os dados certos.`))NV.bloq=true;
+      if(!row&&S.persist&&!rest&&!confirm(`A nuvem ainda não tem dados.\n\nEnviar os dados deste computador (${ALL.length} funcionário(s), competência ${MES_NOME})?\n\nIsso deve ser feito só uma vez, no computador com os dados certos.`))NV.bloq=true;
     }
     try{localStorage.removeItem(LS+'.restaurar');localStorage.setItem(LS+'.nuvem','1')}catch(e){}
     NV.pronto=true;$('#nuvemLogin')?.remove();$('#nuvemBox').hidden=false;
