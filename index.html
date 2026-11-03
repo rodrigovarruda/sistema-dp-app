@@ -1269,9 +1269,8 @@ function renderCad(){
        ${f.vinc==='avulso'?`<h3 class="sub">Pagamento do avulso</h3>
        <div class="ac-cards"><div class="ac-card"><span class="hint">Diária de ${esc(f.funcao)}</span><b class="num">${brl(f.diaria||DIARIAS[f.funcao])}</b><span class="hint">por dia de serviço</span></div>
        <div class="ac-card off"><span class="hint">Passagem e alimentação</span><b>Incluídas na diária</b></div></div>
-       <p class="hint">O valor vem da tabela de diárias por função. O preço de cada diária fica guardado, mesmo que a tabela mude depois.</p>`:`<h3 class="sub">Acordo vigente em ${MES_NOME}</h3><p class="hint" style="margin:0 0 8px">Vale a partir de ${compLabel(A.desde)} · ${esc(A.motivo)}</p>
+       <p class="hint">O valor vem da tabela de diárias por função. O preço de cada diária fica guardado, mesmo que a tabela mude depois.</p>`:`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Acordo vigente em ${MES_NOME}</h3>${dp&&!S.cadEdit?`<button class="btn primary" data-cadedit="1">Alterar acordo</button>`:''}</div><p class="hint" style="margin:0 0 8px">Vale a partir de ${compLabel(A.desde)} · ${esc(A.motivo)}</p>
        <div class="ac-cards">${acordoResumo(A)}</div>`}`;
-      h+=lembretesHTML(f);
       if(dp&&S.vincEdit){
         const novo=f.vinc==='avulso'?'mensalista':'avulso';
         h+=`<form id="vincForm" class="cad-form"><h3 class="sub" style="margin-top:0">${novo==='mensalista'?'Registrar como mensalista':'Passar para avulso'}</h3>
@@ -1289,7 +1288,8 @@ function renderCad(){
           <div id="formErr" class="err"></div>
           <div class="actions"><button class="btn primary" type="submit">Salvar novo acordo</button><button class="btn" type="button" data-cadcancel="1">Cancelar</button></div>
           <p class="hint">Os meses já fechados continuam com o acordo da época.</p></form>`;
-      } else if(dp) h+=`<div class="actions"><button class="btn" data-cadedit="1">Alterar acordo</button></div>`;
+      }
+      h+=lembretesHTML(f);
       if(f.vinc!=='avulso')h+=`<h3 class="sub">Histórico do acordo</h3><div class="scroller"><table class="ben"><thead><tr><th>A partir de</th>${VERBAS.map(v=>`<th>${v[1].replace(' (tarifa de uma viagem)','')}</th>`).join('')}<th style="text-align:left">Motivo</th></tr></thead><tbody>
         ${f.acordos.slice().reverse().map(a=>`<tr><td>${compLabel(a.desde)}</td>${VERBAS.map(([k])=>{const v=k==='tarifa'?a.tarifa:a.ben[k];return `<td>${v==null?'—':brl(v)+(a.pg?.[k]?'<br><span class="hint">'+PG[a.pg[k]]+'</span>':'')}</td>`}).join('')}<td style="text-align:left;font-family:var(--f-body)">${esc(a.motivo)} · ${esc(a.quem)}</td></tr>`).join('')}</tbody></table></div>`;
     }
@@ -1326,6 +1326,14 @@ function renderLembretes(){
     <p class="hint" style="margin:0">Todos os lembretes pendentes, do mais urgente para o mais distante. Os que vencem em até ${LEMB_ANTES} dias aparecem no topo do sistema.</p>
     ${xs.length?`<div class="lemb-lista">${xs.map(({f,l,d})=>`<div class="lemb ${d<=LEMB_ANTES?'perto':''}"><span><b>${esc(f.nome)}</b>${selo(f)}<br><b class="num">${esc(l.data)}</b> · ${esc(l.txt)} <span class="tag">${lembQuando(d)}</span></span>
       <button class="btn" data-cad="${f.id}">Abrir ficha</button></div>`).join('')}</div>`:'<div class="empty">Nenhum lembrete pendente.</div>'}</div>`;
+}
+// abre a ficha do primeiro da busca; não interrompe um formulário aberto (cadastro, acordo, correção)
+function abrirBusca(forcar){
+  const b=document.querySelector('#cadItens .cad-item:not([hidden])'),i=$('#cadBusca');if(!b||!i)return;
+  if(!forcar&&(['novo','importar'].includes(S.cadSel)||S.cadEdit||S.dadosEdit||S.vincEdit||S.cpfEdit))return;
+  if(S.cadSel===b.dataset.cad&&!forcar)return;
+  S.cadSel=b.dataset.cad;S.cadEdit=false;S.vincEdit=false;S.dadosEdit=null;render();
+  const n=$('#cadBusca');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}
 }
 // busca na lista de funcionários: por nome (sem acentos) ou pelos números do CPF
 const cadAchou=(f,q=S.cadBusca)=>{q=(q||'').trim();if(!q)return true;const d=soDig(q);return norm(f.nome).includes(norm(q))||(d.length>=3&&soDig(f.cpf).includes(d))};
@@ -2156,6 +2164,8 @@ $('#view').addEventListener('click',e=>{
   if(gv){S.tab='funcionarios';S.cadSel=gv.dataset.govinc;S.vincEdit=true;S.cadEdit=false;render();$('#vincForm')?.scrollIntoView({block:'center'});return}
   const vb=e.target.closest('[data-vincedit],[data-vinccancel]');
   if(vb){S.vincEdit=!!vb.dataset.vincedit;S.cadEdit=false;render();if(S.vincEdit)$('#vincForm')?.scrollIntoView({block:'center'});return}
+  const oe=e.target.closest('[data-outraemp]');
+  if(oe){const f=byId(oe.dataset.outraemp);S.empresa=empresaDe(f);$('#selEmp').value=S.empresa;S.cadSel=f.id;S.cadEdit=false;render();return toast(`${f.nome} está na ${S.empresa}.`)}
   const lb=e.target.closest('[data-lembok],[data-lembdel]');
   if(lb){const [id,lid]=(lb.dataset.lembok||lb.dataset.lembdel).split(':'),f=byId(id),l=f?.lembretes?.find(x=>x.id===lid);if(!l)return;
     if(lb.dataset.lembok){l.feito=new Date().toLocaleDateString('pt-BR');registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Feito','Lembrete do acordo concluído');render();return toast('Lembrete concluído.')}
@@ -2166,6 +2176,7 @@ $('#view').addEventListener('click',e=>{
   const cs=e.target.closest('[data-cad],[data-cadnovo],[data-cadedit],[data-cadcancel]');
   if(cs){S.vincEdit=false;if(cs.dataset.cadnovo)S.cadSel='novo';else if(cs.dataset.cadedit)S.cadEdit=true;else if(cs.dataset.cadcancel)S.cadEdit=false;else{S.cadSel=cs.dataset.cad;S.cadEdit=false}render();
     // escolheu na lista: se a ficha ficou fora da tela (página rolada ou celular), leva até ela
+    if(cs.dataset.cadedit){$('#acForm')?.scrollIntoView({block:'start'});$('#val_salario')?.focus({preventScroll:true})}
     if(cs.classList.contains('cad-item')||cs.dataset.cadnovo){const m=$('.cad-main'),y=m?.getBoundingClientRect().top;if(m&&(y<0||y>innerHeight*.6))m.scrollIntoView({block:'start'})}
     return}
   if(e.target.closest('[data-rseltodos]')){const cs=[...document.querySelectorAll('.rsel')],marcar=cs.some(c=>!c.checked);cs.forEach(c=>c.checked=marcar);return}
@@ -2202,12 +2213,18 @@ $('#view').addEventListener('click',e=>{
     render();toast('Situação: '+ST_LABEL[g.dataset.go]);
   }
 });
-$('#view').addEventListener('keydown',e=>{const r=e.target.closest('[data-exp]');if(r&&(e.key==='Enter'||e.key===' ')){e.preventDefault();r.click()}});
+$('#view').addEventListener('keydown',e=>{if(e.target.id==='cadBusca'&&e.key==='Enter'){e.preventDefault();clearTimeout(S.buscaT);return abrirBusca(true)}const r=e.target.closest('[data-exp]');if(r&&(e.key==='Enter'||e.key===' ')){e.preventDefault();r.click()}});
 $('#view').addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='cadBusca'){S.cadBusca=t.value;let n=0;
     document.querySelectorAll('#cadItens .cad-item').forEach(b=>{const f=byId(b.dataset.cad),ok=!!f&&cadAchou(f);b.hidden=!ok;if(ok)n++});
-    $('#cadNada').hidden=n>0;return}
+    const nada=$('#cadNada');nada.hidden=n>0;
+    // não achou na empresa escolhida no topo: procura nas outras
+    if(!n&&t.value.trim()&&!TODAS()&&S.perfil==='dp'){const os=ALL.filter(f=>!funcsEmp().includes(f)&&cadAchou(f)).slice(0,5);
+      nada.innerHTML='Ninguém encontrado nesta empresa.'+os.map(f=>`<br>Está na ${empresaDe(f)}: <b>${esc(f.nome)}</b> <button class="link-btn" data-outraemp="${f.id}">Abrir</button>`).join('')}
+    else nada.textContent='Ninguém encontrado.';
+    // abre sozinha a ficha do primeiro encontrado, sem tirar o cursor da busca
+    clearTimeout(S.buscaT);if(n&&t.value.trim())S.buscaT=setTimeout(()=>abrirBusca(false),350);return}
   if(t.matches&&t.matches('[data-cnpj]')){t.value=fmtCnpj(t.value);return}
   if(t.matches&&t.matches('[data-alelo]')){const id=t.dataset.alelo,e2=$('#aleloEsp-'+id),tot=+e2.dataset.total,
     soma=(parseBRL($('#aleloAlim-'+id).value||'0')||0)+(parseBRL($('#aleloLivre-'+id).value||'0')||0)+(parseBRL($('#aleloNatal-'+id)?.value||'0')||0);
