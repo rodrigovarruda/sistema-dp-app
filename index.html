@@ -1093,7 +1093,7 @@ function renderPlanilha(){
   if(S.planObra&&!OBRAS[S.planObra])S.planObra='';
   const naObra=f=>lotacao(f,NDIAS)===S.planObra||Object.values(S.ponto[f.id]||{}).some(r=>CODES[r.c]?.trab&&resolve(r.o)===S.planObra);
   // com obra escolhida, mostra quem está nela em qualquer empresa do grupo
-  const fs=S.planObra?ALL.filter(f=>(S.perfil==='dp'||f.lot.some(l=>l.obra==='ipe'))&&naObra(f)):visiveis();
+  const fs=S.planObra?ALL.filter(f=>ativoNoMes(f)&&(S.perfil==='dp'||f.lot.some(l=>l.obra==='ipe'))&&naObra(f)):visiveis();
   const filtroObra=`<label class="ac-chk" style="font-weight:600">Obra <select id="planObra" aria-label="Mostrar só os funcionários da obra"><option value="">Todas</option>${Object.entries(OBRAS).sort((a,b)=>a[1].nome.localeCompare(b[1].nome)).map(([k,o])=>`<option value="${k}" ${k===S.planObra?'selected':''}>${esc(o.nome)} · ${o.empresa}</option>`).join('')}</select></label>`;
   let h=`<section class="panel"><div class="panel-head"><h2>Planilha do mês · ${S.planObra?esc(OBRAS[S.planObra].nome):nomeEmp()} · ${MES_NOME}</h2><span class="hint">Clique num dia para lançar ou corrigir. A mesma informação aparece no calendário individual.</span>${filtroObra}${S.perfil==='dp'&&(TODAS()||!['aguardando','fechado'].includes(S.status[S.empresa]))?'<button class="btn" data-xfds="1">Marcar X nos fins de semana vazios</button>':''}<button class="btn" data-plannomes="1">${S.planNomes?'Ver o mês inteiro':'Ver nomes completos das obras'}</button><button class="btn" data-faltasabrir="1">Relatório de faltas</button></div>
     ${S.faltasForm?`<form id="faltasForm" class="mes-form"><b>Relatório de faltas</b>
@@ -1235,8 +1235,9 @@ function opcoesRel(){
     <optgroup label="Por empresa">${Object.keys(FUNC).map(e=>`<option value="emp:${e}" ${sel==='emp:'+e?'selected':''}>${e}</option>`).join('')}</optgroup>
     <optgroup label="Por obra (onde está lotado no fim do mês)">${Object.entries(OBRAS).sort((a,b)=>a[1].nome.localeCompare(b[1].nome)).map(([k,o])=>`<option value="obra:${k}">${esc(o.nome)} · ${o.empresa}</option>`).join('')}</optgroup>`;
 }
-function filtroRel(escolha){
-  const base=ALL.filter(f=>S.perfil==='dp'||f.lot.some(l=>l.obra==='ipe'));
+// todos=true inclui quem já saiu (relatório de faltas por período, que pode olhar meses anteriores)
+function filtroRel(escolha,todos){
+  const base=ALL.filter(f=>(todos||ativoNoMes(f))&&(S.perfil==='dp'||f.lot.some(l=>l.obra==='ipe')));
   const [tipo,val]=escolha.split(':');
   const fs=tipo==='emp'?base.filter(f=>empresaDe(f)===val):tipo==='obra'?base.filter(f=>lotacao(f,NDIAS)===val):base;
   const titulo=tipo==='emp'?val:tipo==='obra'?`Obra ${OBRAS[val]?.nome||val} (${OBRAS[val]?.empresa||''})`:'Todas as empresas';
@@ -1266,7 +1267,7 @@ const pontoComp=k=>k===COMP?S.ponto:S.comps?.[k]?.ponto;
 const lerData=s=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s||'').trim());if(!m)return null;const d=new Date(+m[3],+m[2]-1,+m[1]);return d.getDate()===+m[1]&&d.getMonth()===+m[2]-1?d:null};
 const fmtData=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
 function relatorioFaltas(de,ate,escolha,comAT){
-  const {tipo,val,fs,titulo}=filtroRel(escolha),reg={},semDados=new Set();
+  const {tipo,val,fs,titulo}=filtroRel(escolha,true),reg={},semDados=new Set();
   for(const d=new Date(de);d<=ate;d.setDate(d.getDate()+1)){
     const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),p=pontoComp(k);
     if(!p){semDados.add(MESES_LONGO[d.getMonth()]+'/'+d.getFullYear());continue}
@@ -2430,7 +2431,7 @@ $('#view').addEventListener('input',e=>{
     document.querySelectorAll('#cadItens .cad-item').forEach(b=>{const f=byId(b.dataset.cad),ok=!!f&&cadAchou(f);b.hidden=!ok;if(ok)n++});
     const nada=$('#cadNada');nada.hidden=n>0;
     // não achou na empresa escolhida no topo: procura nas outras
-    if(!n&&t.value.trim()&&!TODAS()&&S.perfil==='dp'){const os=ALL.filter(f=>!funcsEmp().includes(f)&&cadAchou(f)).slice(0,5);
+    if(!n&&t.value.trim()&&!TODAS()&&S.perfil==='dp'){const os=ALL.filter(f=>ativoNoMes(f)&&!funcsEmp().includes(f)&&cadAchou(f)).slice(0,5);
       nada.innerHTML='Ninguém encontrado nesta empresa.'+os.map(f=>`<br>Está na ${empresaDe(f)}: <b>${esc(f.nome)}</b> <button class="link-btn" data-outraemp="${f.id}">Abrir</button>`).join('')}
     else nada.textContent='Ninguém encontrado.';
     // abre sozinha a ficha do primeiro encontrado, sem tirar o cursor da busca
