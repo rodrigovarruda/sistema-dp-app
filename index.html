@@ -562,7 +562,18 @@ ALL.forEach(f=>S.ponto[f.id]={});
 // ---------- Regras ----------
 const resolve=t=>S.apelidos[norm(t)]||null;
 const TODAS=()=>S.empresa==='TODAS';
-const funcsEmp=(emp=S.empresa)=>emp==='TODAS'?[].concat(...Object.values(FUNC)):(FUNC[emp]||[]);
+// Saída do funcionário (f.saida): dispensa no período de teste, aviso prévio trabalhado ou desligamento.
+// data = último dia de trabalho. No mês da saída ele continua nas listas; nos meses seguintes, não.
+const saidaData=f=>f.saida?lerData(f.saida.data):null;
+const ativoNoMes=f=>{const d=saidaData(f);return !d||d.getFullYear()*12+d.getMonth()>=ANO*12+MES};
+// dia da saída dentro do mês aberto (ou null se a saída não é neste mês)
+const saidaDia=f=>{const d=saidaData(f);return d&&d.getFullYear()===ANO&&d.getMonth()===MES?d.getDate():null};
+const saidaTxt=f=>{if(!f.saida)return '';const d=saidaData(f),h=new Date();h.setHours(0,0,0,0);
+  if(f.saida.tipo==='dispensa')return `Dispensado em ${f.saida.data} (não aprovado no teste)`;
+  if(f.saida.tipo==='aviso'&&d>=h)return `Em aviso prévio até ${f.saida.data}`;
+  return `Desligado em ${f.saida.data}`};
+const funcsEmpTodos=(emp=S.empresa)=>emp==='TODAS'?[].concat(...Object.values(FUNC)):(FUNC[emp]||[]);
+const funcsEmp=(emp=S.empresa)=>funcsEmpTodos(emp).filter(ativoNoMes);
 const nomeEmp=()=>TODAS()?'Todas as empresas':S.empresa;
 const stDe=f=>S.status[empresaDe(f)]||'aberto';
 const selo=f=>TODAS()||(S.tab==='planilha'&&S.planObra)?` <span class="emp-chip emp-${empresaDe(f)}" style="font-size:10px;padding:1px 6px">${empresaDe(f)}</span>`:'';
@@ -570,6 +581,7 @@ const visiveis=()=>funcsEmp().filter(f=>S.perfil==='dp'||f.lot.some(l=>l.obra===
 function podeEditar(f,d){
   const stF=stDe(f);if(stF==='aguardando'||stF==='fechado')return false;if(stF==='conferencia'&&S.perfil!=='dp')return false;
   if(d<admDia(f)&&!S.ponto[f.id][d])return false;
+  if(saidaDia(f)&&d>saidaDia(f)&&!S.ponto[f.id][d])return false;
   if(S.fechF[f.id])return false;
   if(vincDia(f,d)==='avulso'&&S.qf[qDe(d)][f.id])return false;
   const st=S.status[S.empresa];
@@ -584,7 +596,7 @@ function pendencias(emp=S.empresa){
   return out;
 }
 const admDia=f=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f.adm||'');if(!m)return 1;const k=+m[3]*12+(+m[2]-1),c=ANO*12+MES;return k<c?1:k>c?99:+m[1]};
-const exigeDia=(f,d)=>obrig(d)&&d>=admDia(f)&&vincDia(f,d)!=='avulso';
+const exigeDia=(f,d)=>obrig(d)&&d>=admDia(f)&&vincDia(f,d)!=='avulso'&&!(saidaDia(f)&&d>saidaDia(f));
 // Férias, perícia e suspensão programadas: período de datas (pode passar de um mês para o outro).
 // Preenche os dias vazios do mês aberto (dias corridos, com fins de semana e feriados); o restante entra quando o mês seguinte for aberto.
 const AG_COD=['FE','AT','PE','SU']; // contam em dias corridos (com fins de semana e feriados)
@@ -661,6 +673,9 @@ function calc(f){
   if(temAvulso(f)&&avDias>0){const per=f.vh.length>1?` · período como avulso: ${f.vh.filter(x=>x.vinc==='avulso').map(x=>{const i=f.vh.indexOf(x),fim=f.vh[i+1]?f.vh[i+1].de-1:NDIAS;return dd(x.de)+' a '+dd(fim)}).join(', ')}`:'';
     r.itens.diarias={bruto:f.diaria*avDias,valor:f.diaria*avDias,f:`${nfmt(avDias)} dia(s) de serviço avulso no ponto × ${brl(f.diaria)} (${f.funcao})${per}`}}
   r.avDias=avDias;
+  // saída neste mês: o último fechamento não paga os benefícios do mês seguinte (só a bonificação do mês trabalhado)
+  if(saidaDia(f)){const tira=['ajuda','cafe','alim','transp'].filter(k=>r.itens[k]);tira.forEach(k=>delete r.itens[k]);
+    if(tira.length)r.nota=(r.nota?r.nota+' ':'')+`${saidaTxt(f)}: ajuda de custo, café, alimentação e passagens de ${PROX_NOME} não são pagos.`}
   // funcionário já fechado: valem os valores gravados no fechamento (o que foi pago), mesmo que a regra de cálculo mude depois
   const fg=S.fechF[f.id]?.itens;
   if(fg)for(const k in r.itens)if(k in fg&&Math.abs(fg[k]-r.itens[k].valor)>.004){r.itens[k].valor=fg[k];r.itens[k].natal=false;r.itens[k].gravado=true}
@@ -763,13 +778,17 @@ function periodoAfast(f,c,d){
   return `${dd(i)} a ${dd(j)}${j===NDIAS?' (ou mais)':''}`;
 }
 function dadosRelatorios(){
-  const base=S.perfil==='dp'?ALL:visiveis(),dr=diaRef(),hoje=new Date();hoje.setHours(0,0,0,0);
+  const dr=diaRef(),hoje=new Date();hoje.setHours(0,0,0,0),ref=new Date(ANO,MES,dr);
+  // ativos no dia de referência: quem já saiu antes dele não conta
+  const todos=S.perfil==='dp'?ALL:funcsEmpTodos().filter(f=>f.lot.some(l=>l.obra==='ipe')),base=todos.filter(f=>!saidaData(f)||saidaData(f)>=ref);
+  const aviso=base.filter(f=>f.saida?.tipo==='aviso'&&saidaData(f)>=hoje);
+  const saidas=todos.filter(f=>saidaDia(f)).sort((a,b)=>saidaData(a)-saidaData(b));
   const emp=Object.keys(FUNC).map(e=>{const fs=base.filter(f=>empresaDe(f)===e);return {e,m:fs.filter(f=>f.vinc==='mensalista').length,a:fs.filter(f=>f.vinc!=='mensalista').length,t:fs.length}}).filter(x=>x.t);
   const obras={};for(const f of base){const k=lotacao(f,dr);(obras[k]=obras[k]||{k,m:0,a:0,t:0})[f.vinc==='mensalista'?'m':'a']++;obras[k].t++}
   const agora=AFAST.map(([c,l])=>({c,l,fs:base.filter(f=>S.ponto[f.id]?.[dr]?.c===c)}));
   const mes=AFAST.map(([c,l])=>{let dias=0;const fs=base.filter(f=>{const n=Object.values(S.ponto[f.id]||{}).filter(r=>r.c===c).length;dias+=n;return n>0});return {c,l,n:fs.length,dias}});
   const prog=base.flatMap(f=>(f.agenda||[]).filter(a=>lerData(a.ate)>=hoje).map(a=>({f,a}))).sort((x,y)=>lerData(x.a.de)-lerData(y.a.de));
-  return {base,dr,emp,obras:Object.values(obras).sort((a,b)=>b.t-a.t||(OBRAS[a.k]?.nome||'').localeCompare(OBRAS[b.k]?.nome||'')),agora,mes,prog};
+  return {base,dr,emp,aviso,saidas,obras:Object.values(obras).sort((a,b)=>b.t-a.t||(OBRAS[a.k]?.nome||'').localeCompare(OBRAS[b.k]?.nome||'')),agora,mes,prog};
 }
 // tabelas do relatório (as mesmas na tela e na impressão)
 function tabelasRelatorios(R){
@@ -789,16 +808,21 @@ function tabelasRelatorios(R){
   t.prog=R.prog.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Situação</th><th style="text-align:left">De</th><th style="text-align:left">Até</th><th style="text-align:left">Observação</th></tr></thead><tbody>
     ${R.prog.map(({f,a})=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${empresaDe(f)}</span></td><td style="text-align:left"><span class="code c-${a.c}" style="padding:1px 6px;border-radius:4px">${a.c}</span> ${CODES[a.c].l}</td><td style="text-align:left">${esc(a.de)}</td><td style="text-align:left">${esc(a.ate)}</td><td style="text-align:left;white-space:normal">${esc(a.obs||'')}</td></tr>`).join('')}</tbody></table>`
     :'<p class="hint">Nenhum período programado daqui para a frente.</p>';
+  const sl=[...R.aviso.filter(f=>!R.saidas.includes(f)),...R.saidas];
+  t.saidas=sl.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Situação</th><th style="text-align:left">Motivo</th><th style="text-align:left">Empresa</th></tr></thead><tbody>
+    ${sl.map(f=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${esc(f.funcao)}</span></td><td style="text-align:left;white-space:normal">${esc(saidaTxt(f))}${f.saida.tipo==='aviso'&&f.saida.ini?`<br><span class="hint sub">aviso de ${esc(f.saida.ini)} a ${esc(f.saida.data)}</span>`:''}</td><td style="text-align:left;white-space:normal">${esc(f.saida.motivo)}</td><td style="text-align:left">${empresaDe(f)}</td></tr>`).join('')}</tbody></table>`
+    :`<p class="hint">Ninguém em aviso prévio nem saindo em ${MES_NOME}.</p>`;
   return t;
 }
 function renderRelatorios(){
   const R=dadosRelatorios(),T=tabelasRelatorios(R),card=(t,v,s='')=>`<div class="ac-card"><span class="hint">${t}</span><b class="num">${v}</b>${s?`<span class="hint">${s}</span>`:''}</div>`;
   $('#view').innerHTML=`<section class="panel"><div class="panel-head"><h2>Relatórios · ${MES_NOME}</h2><button class="btn" data-relimp="1">Imprimir</button></div>
     <div style="padding:14px">
-      <div class="ac-cards">${card('Funcionários',R.base.length,'todas as empresas')}${R.agora.map(g=>card(g.l,g.fs.length,refTxt())).join('')}</div>
+      <div class="ac-cards">${card('Funcionários',R.base.length,'todas as empresas')}${R.agora.map(g=>card(g.l,g.fs.length,refTxt())).join('')}${card('Em aviso prévio',R.aviso.length,'até o fim do aviso')}${card('Saídas no mês',R.saidas.length,MES_NOME)}</div>
       <h3 class="sub">Funcionários por empresa</h3><div class="scroller">${T.emp}</div>
       <h3 class="sub">Afastados ${refTxt()}</h3><div class="scroller">${T.agora}</div>
       <h3 class="sub">Afastamentos em ${MES_NOME}</h3><div class="scroller">${T.mes}</div>
+      <h3 class="sub">Aviso prévio e saídas</h3><div class="scroller">${T.saidas}</div>
       <h3 class="sub">Programados daqui para a frente</h3><div class="scroller">${T.prog}</div>
       <h3 class="sub">Funcionários por obra <span class="hint" style="font-weight:400">(lotação ${refTxt()})</span></h3><div class="scroller">${T.obras}</div>
     </div></section>`;
@@ -806,7 +830,7 @@ function renderRelatorios(){
 function imprimirRelatorios(){
   const R=dadosRelatorios(),T=tabelasRelatorios(R),h=t=>`<h2 style="font-size:13px;text-transform:uppercase;margin:14px 0 4px">${t}</h2>`;
   janelaRelatorio({titulo:`Relatório de funcionários · ${MES_NOME}`,meta:`${R.base.length} funcionário(s) · situação ${refTxt()}`,logo:EMPRESAS.CONARTE?.logo,
-    tabela:h('Funcionários por empresa')+T.emp+h(`Afastados ${refTxt()}`)+T.agora+h(`Afastamentos em ${MES_NOME}`)+T.mes+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
+    tabela:h('Funcionários por empresa')+T.emp+h(`Afastados ${refTxt()}`)+T.agora+h(`Afastamentos em ${MES_NOME}`)+T.mes+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
     nota:'Afastados: férias (FE), perícia (PE), atestado médico (AT) e suspensão (SU) lançados no ponto ou programados.'});
 }
 // Insalubridade por obra: % sobre o salário mínimo, para todas as funções menos as marcadas na obra
@@ -829,7 +853,7 @@ function custoFunc(f,guia=0){
     if(pago>0){it.sal1=+fo.q1||0;it.sal2=+fo.q2||0}
     else if(A.salario&&ini<=NDIAS){estSal=true;const nF=Object.entries(p).filter(([d,x])=>+d>=ini&&(x.c==='F'||x.c==='SU')).length;
       // estimativa sem folha: metade em cada quinzena
-      const diasVinc=ini<=1?30:Math.min(30,NDIAS-ini+1),est2=A.salario/30*Math.max(0,diasVinc-nF)*(1+(+E.encargos||0)/100);it.sal1=it.sal2=est2/2;
+      const fimV=saidaDia(f)||NDIAS,diasVinc=ini<=1&&fimV===NDIAS?30:Math.min(30,fimV-ini+1),est2=A.salario/30*Math.max(0,diasVinc-nF)*(1+(+E.encargos||0)/100);it.sal1=it.sal2=est2/2;
       // a insalubridade segue a mesma proporção do salário estimado (com o salário informado, ela já vem dentro dele)
       fatorIns=Math.max(0,diasVinc-nF)/30*(1+(+E.encargos||0)/100);
       // periculosidade: % do próprio salário, na mesma proporção, rateada pelas obras como o salário
@@ -1084,7 +1108,7 @@ function renderPlanilha(){
   h+=`<th>Dias trab.</th></tr></thead><tbody>`;
   for(const f of fs){
     let t=0;for(const d in S.ponto[f.id]){const c=S.ponto[f.id][d].c;if(CODES[c].trab)t+=CODES[c].peso}
-    h+=`<tr><td class="name"><button class="link-btn nome-link" data-gofunc="${f.id}" title="Abrir a ficha de ${esc(f.nome)}"><b>${esc(f.nome)}</b></button>${selo(f)?selo(f).trim()+'<br>':''}<small>${esc(f.funcao)} · ${vincCurto(f)} · ${OBRAS[lotacao(f,NDIAS)].nome}${S.fechF[f.id]?' · <b>fechado</b>':''}</small></td>`;
+    h+=`<tr><td class="name"><button class="link-btn nome-link" data-gofunc="${f.id}" title="Abrir a ficha de ${esc(f.nome)}"><b>${esc(f.nome)}</b></button>${selo(f)?selo(f).trim()+'<br>':''}<small>${f.saida?`<b style="color:var(--bad)">${esc(saidaTxt(f))}</b> · `:''}${esc(f.funcao)} · ${vincCurto(f)} · ${OBRAS[lotacao(f,NDIAS)].nome}${S.fechF[f.id]?' · <b>fechado</b>':''}</small></td>`;
     for(let d=1;d<=NDIAS;d++)h+=cellHTML(f,d);
     h+=`<td class="tot">${nfmt(t)}</td></tr>`;
   }
@@ -1325,14 +1349,15 @@ const opcoesObraEmp=(emp,sel)=>{const os=Object.entries(OBRAS).filter(([k,o])=>o
   const mesma=os.filter(([,o])=>o.empresa===emp),outras=os.filter(([,o])=>o.empresa!==emp);
   return os.length?mesma.map(x=>op(x)).join('')+(outras.length?`<optgroup label="Obras de outras empresas">${outras.map(x=>op(x,true)).join('')}</optgroup>`:''):`<option value="">Nenhuma obra cadastrada (aba Obras)</option>`};
 function renderCad(){
-  const fs=visiveis(),dp=S.perfil==='dp';
+  const dp=S.perfil==='dp',deslig=dp?funcsEmpTodos().filter(f=>!ativoNoMes(f)):[],fs=visiveis().concat(S.verDeslig?deslig:[]);
   if(S.cadSel==='importar'&&!S.imp)S.cadSel=null;
   if(!['novo','importar','lembretes'].includes(S.cadSel)&&!fs.find(f=>f.id===S.cadSel))S.cadSel=fs[0]?.id;
   const nLemb=lembAbertos(fs).length;
   let h=`<section class="panel"><div class="panel-head"><h2>Funcionários · ${nomeEmp()}</h2><span class="hint">${dp?'O acordo de cada funcionário define o que ele recebe e quanto.':'Somente o DP cadastra funcionários e altera acordos.'}</span></div><div class="cad"><div class="cad-list">
     ${dp?`<button class="btn primary" data-cadnovo="1">+ Cadastrar funcionário</button><button class="btn" data-impfolha="1">Importar da folha</button>${nLemb?`<button class="btn" data-cad="lembretes">Lembretes (${nLemb})</button>`:''}<input type="file" id="impFile" accept=".json,application/json" hidden data-impfile="1">`:''}
+    ${deslig.length?`<button class="btn" data-verdeslig="1">${S.verDeslig?'Esconder':'Mostrar'} desligados (${deslig.length})</button>`:''}
     <input type="search" id="cadBusca" class="cad-busca" placeholder="Buscar por nome ou CPF" aria-label="Buscar funcionário por nome ou CPF" value="${esc(S.cadBusca||'')}">
-    <div class="cad-itens" id="cadItens">${fs.map(f=>`<button class="cad-item" data-cad="${f.id}" data-busca="${esc(norm(f.nome)+' '+soDig(f.cpf))}" aria-current="${S.cadSel===f.id}" ${cadAchou(f)?'':'hidden'}><b>${esc(f.nome)}${selo(f)}</b><span class="hint">${esc(f.funcao)} · ${vincCurto(f)}</span></button>`).join('')}
+    <div class="cad-itens" id="cadItens">${fs.map(f=>`<button class="cad-item" data-cad="${f.id}" data-busca="${esc(norm(f.nome)+' '+soDig(f.cpf))}" aria-current="${S.cadSel===f.id}" ${cadAchou(f)?'':'hidden'}><b>${esc(f.nome)}${selo(f)}</b><span class="hint">${esc(f.funcao)} · ${vincCurto(f)}</span>${f.saida?`<span class="tag">${esc(saidaTxt(f))}</span>`:''}</button>`).join('')}
     <p class="hint" id="cadNada" ${fs.some(cadAchou)?'hidden':''}>Ninguém encontrado.</p></div></div><div class="cad-main">`;
   if(S.cadSel==='novo'){
     h+=`<form id="novoForm" class="cad-form"><h3 class="sub" style="margin-top:0">Novo funcionário</h3>
@@ -1360,7 +1385,8 @@ function renderCad(){
     if(!f){h+=`<div class="empty">Nenhum funcionário no seu escopo.</div>`}
     else{
       const A=acordo(f);
-      h+=`<div class="ficha-top"><h3 class="sub" style="margin:0">${esc(f.nome)}</h3><span style="display:flex;gap:6px;flex-wrap:wrap">${dp&&S.dadosEdit!==f.id?`<button class="btn" data-dadosedit="${f.id}">Corrigir dados</button>`:''}${dp&&!S.vincEdit&&!S.fechF[f.id]?`<button class="btn primary" data-vincedit="1">${f.vinc==='avulso'?'Registrar como mensalista':'Mudar para avulso'}</button>`:''}</span></div>
+      h+=`<div class="ficha-top"><h3 class="sub" style="margin:0">${esc(f.nome)}</h3><span style="display:flex;gap:6px;flex-wrap:wrap">${dp&&S.dadosEdit!==f.id?`<button class="btn" data-dadosedit="${f.id}">Corrigir dados</button>`:''}${dp&&!S.vincEdit&&!S.fechF[f.id]&&!f.saida?`<button class="btn primary" data-vincedit="1">${f.vinc==='avulso'?'Registrar como mensalista':'Mudar para avulso'}</button>`:''}${dp&&!f.saida&&S.saidaEdit!==f.id?`<button class="btn" data-saidaedit="${f.id}">Encerrar vínculo</button>`:''}</span></div>
+       ${saidaHTML(f)}
        <dl class="facts facts-grid"><div><dt>Função</dt><dd>${esc(f.funcao)}</dd></div><div><dt>Vínculo</dt><dd>${vincLongo(f)}${temAvulso(f)?' · diária de '+brl(f.diaria||DIARIAS[f.funcao]):''}</dd></div>
        <div><dt>Obra atual</dt><dd>${f.lot.map(l=>OBRAS[l.obra].nome+(l.de>1?` (desde ${dd(l.de)})`:'')).join(' → ')}</dd></div><div><dt>CPF</dt><dd class="num">${f.cpf?esc(f.cpf):(S.perfil==='dp'?`<span style="color:var(--bad)">Não cadastrado</span><br><button class="link-btn" data-cpfedit="${f.id}">Cadastrar CPF</button>`:cpfTxt(f))}</dd></div>
        ${f.contrat?.vinc==='avulso'?`<div><dt>Início do período de teste</dt><dd class="num">${f.adm}</dd></div><div><dt>Admissão (registro)</dt><dd class="num">${admissaoTxt(f)}</dd></div>`:`<div><dt>Admissão</dt><dd class="num">${f.adm}</dd></div>`}<div><dt>Obra de contratação</dt><dd>${esc(OBRAS[f.contrat.obra].nome)} · ${OBRAS[f.contrat.obra].empresa!==empresaDe(f)?`obra da ${esc(OBRAS[f.contrat.obra].empresa)}, registrado na ${esc(empresaDe(f))}`:esc(f.contrat.empresa)}</dd></div></dl>
@@ -1451,6 +1477,23 @@ function abrirBusca(forcar){
   if(S.cadSel===b.dataset.cad&&!forcar)return;
   S.cadSel=b.dataset.cad;S.cadEdit=false;S.vincEdit=false;S.dadosEdit=null;render();
   const n=$('#cadBusca');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}
+}
+// Ficha: situação de saída (aviso prévio, desligamento, dispensa) ou o formulário para encerrar o vínculo
+function saidaHTML(f){
+  const dp=S.perfil==='dp',s=f.saida;
+  if(s)return `<div class="lemb perto" style="margin:8px 0"><span><b>${esc(saidaTxt(f))}</b>${s.tipo==='aviso'&&s.ini?` · aviso de ${esc(s.ini)} a ${esc(s.data)}`:''}<br><span class="hint">${esc(s.motivo)} · registrado em ${esc(s.quando)}. No último fechamento sai só a bonificação do mês, sem os benefícios e a cesta do mês seguinte.</span></span>
+    ${dp?`<button class="btn" data-saidacancel="${f.id}">Cancelar</button>`:''}</div>`;
+  if(!dp||S.saidaEdit!==f.id)return '';
+  const av=f.vinc==='avulso',hoje=new Date().toLocaleDateString('pt-BR');
+  return `<form id="saidaForm" class="cad-form" data-f="${f.id}"><h3 class="sub" style="margin-top:0">Encerrar vínculo de ${esc(f.nome)}</h3>
+    <div class="form-grid"><div class="field"><label for="sTipo">Tipo</label><select id="sTipo" name="tipo">${av?'<option value="dispensa">Dispensa no período de teste (não aprovado)</option>':''}
+      ${!av?'<option value="aviso">Aviso prévio trabalhado</option><option value="deslig">Desligamento (sem aviso trabalhado)</option>':''}${av?'<option value="deslig">Desligamento</option>':''}</select></div>
+      <div class="field" id="sIniBox" ${av?'hidden':''}><label for="sIni">Início do aviso</label><input type="text" id="sIni" name="ini" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA" value="${hoje}"></div>
+      <div class="field"><label for="sData" id="sDataLbl">${av?'Último dia de trabalho':'Fim do aviso (último dia de trabalho)'}</label><input type="text" id="sData" name="data" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA"></div>
+      <div class="field" style="grid-column:1/-1"><label for="sMot">Motivo (obrigatório)</label><input type="text" id="sMot" name="motivo" placeholder="${av?'Ex.: não aprovado no período de teste':'Ex.: pedido de demissão; dispensa sem justa causa'}"></div></div>
+    <p class="hint" style="margin:0">Depois do último dia, o ponto não cobra mais lançamento. No mês da saída ele continua nas listas para o último fechamento; a partir do mês seguinte, sai das listas (veja em "Mostrar desligados").</p>
+    <div id="formErr" class="err"></div>
+    <div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-saidaedit="">Cancelar</button></div></form>`;
 }
 // busca na lista de funcionários: por nome (sem acentos) ou pelos números do CPF
 const cadAchou=(f,q=S.cadBusca)=>{q=(q||'').trim();if(!q)return true;const d=soDig(q);return norm(f.nome).includes(norm(q))||(d.length>=3&&soDig(f.cpf).includes(d))};
@@ -1675,6 +1718,24 @@ $('#view').addEventListener('submit',e=>{
     if(!n)return toast('Nenhum dia útil vazio e liberado neste mês.');
     registrar(`${f.nome} · ${MES_NOME}`,'Dias vazios',`${n} dia(s) lançados como ${obra}`,'Preencher o mês inteiro');
     render();return toast(noLimite(f)?`${n} dia(s) lançados. Atenção: ${f.nome} passou do limite de ${LIMITE_TESTE} dias do período de teste (${nfmt(diasTeste(f))} dias). Registre como mensalista.`:`${n} dia(s) lançados em ${obra} para ${f.nome}.`);
+  }
+  if(fm.id==='saidaForm'){
+    const f=byId(fm.dataset.f),tipo=fm.tipo.value,data=fm.data.value.trim(),ini=fm.ini.value.trim(),motivo=fm.motivo.value.trim().replace(/\s+/g,' ');
+    const d=lerData(data),di=tipo==='aviso'?lerData(ini):null,adm=lerData(f.adm);
+    if(!d)return err('Informe o último dia de trabalho no formato DD/MM/AAAA.');
+    if(tipo==='aviso'&&!di)return err('Informe o início do aviso no formato DD/MM/AAAA.');
+    if(di&&di>d)return err('O fim do aviso precisa ser depois do início.');
+    if(adm&&d<adm)return err(`O último dia não pode ser antes da ${nomeInicio(f)} (${f.adm}).`);
+    if(motivo.length<4)return err('Escreva o motivo.');
+    const quando=new Date().toLocaleDateString('pt-BR');
+    f.saida={tipo,data,ini:tipo==='aviso'?ini:null,motivo,quando,quem:'DP'};
+    const txt=saidaTxt(f);(f.eventos=f.eventos||[]).push({tipo:'saida',data,txt:`<b>${esc(txt.replace(/ \(.*\)$/,''))}</b>: ${esc(motivo)}`});
+    // lembrete automático para o fim do aviso (último fechamento)
+    if(tipo==='aviso')(f.lembretes=f.lembretes||[]).push({id:'l'+Date.now(),auto:'saida',data,txt:'Fim do aviso prévio: fazer o último fechamento (sem os benefícios do mês seguinte)',criado:quando,quem:'DP',feito:null});
+    registrar(`Saída · ${f.nome}`,'Ativo',`${txt}${tipo==='aviso'?` · aviso de ${ini} a ${data}`:''}`,motivo);
+    S.saidaEdit=null;render();
+    const fora=d.getFullYear()*12+d.getMonth()<ANO*12+MES;
+    return toast(`${txt}.${tipo==='aviso'?' Lembrete criado para o fim do aviso.':''}${fora?' Como a data é de um mês anterior, ele já não aparece nas listas deste mês.':''}`);
   }
   if(fm.id==='agForm'){
     const f=byId(fm.dataset.f),c=fm.cod.value,de=fm.de.value.trim(),ate=fm.ate.value.trim(),obs=fm.obs.value.trim(),d1=lerData(de),d2=lerData(ate);
@@ -2066,6 +2127,7 @@ function aleloPadrao(f,total){
 function gravarFech(f,q,alelo,cesta){
   const c=calc(f),aux=auxTotal(c);
   if(cesta===undefined)cesta=!!acordo(f).cesta;
+  if(saidaDia(f))cesta=false; // quem sai não recebe a cesta do mês seguinte
   S.fechF[f.id]={quando:q,total:c.total,aux,alelo,especie:Math.round((aux-aleloSoma(alelo))*100)/100,cesta:!!acordo(f).cesta&&cesta,cestaValor:valorCesta(f),
     itens:Object.fromEntries(Object.keys(BEN_NOMES).map(k=>[k,c.itens[k]?.valor||0]))};
   if(aleloSoma(alelo)>0)f.aleloPadrao={...alelo};
@@ -2297,6 +2359,13 @@ $('#view').addEventListener('click',e=>{
   if(gv){S.tab='funcionarios';S.cadSel=gv.dataset.govinc;S.vincEdit=true;S.cadEdit=false;render();$('#vincForm')?.scrollIntoView({block:'center'});return}
   const vb=e.target.closest('[data-vincedit],[data-vinccancel]');
   if(vb){S.vincEdit=!!vb.dataset.vincedit;S.cadEdit=false;render();if(S.vincEdit)$('#vincForm')?.scrollIntoView({block:'center'});return}
+  const se=e.target.closest('[data-saidaedit]');
+  if(se){S.saidaEdit=se.dataset.saidaedit||null;render();if(S.saidaEdit)$('#saidaForm')?.scrollIntoView({block:'center'});return}
+  const sc=e.target.closest('[data-saidacancel]');
+  if(sc){const f=byId(sc.dataset.saidacancel);if(!f?.saida)return;if(!confirm(`Cancelar "${saidaTxt(f)}" de ${f.nome}?\n\nUse só se foi lançado por engano ou se a saída foi desfeita.`))return;
+    registrar(`Saída · ${f.nome}`,`${saidaTxt(f)} · ${f.saida.motivo}`,'Cancelada','Saída cancelada pelo DP');
+    f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='saida'&&!l.feito));f.eventos=(f.eventos||[]).filter(ev=>ev.tipo!=='saida');delete f.saida;render();return toast('Saída cancelada. O funcionário volta a ficar ativo.')}
+  const vd=e.target.closest('[data-verdeslig]');if(vd){S.verDeslig=!S.verDeslig;return render()}
   const oe=e.target.closest('[data-outraemp]');
   if(oe){const f=byId(oe.dataset.outraemp);S.empresa=empresaDe(f);$('#selEmp').value=S.empresa;S.cadSel=f.id;S.cadEdit=false;render();return toast(`${f.nome} está na ${S.empresa}.`)}
   const agr=e.target.closest('[data-agrefaz]');
@@ -2376,6 +2445,7 @@ $('#view').addEventListener('input',e=>{
 });
 $('#view').addEventListener('change',e=>{
   if(e.target.id==='planObra'){S.planObra=e.target.value;return render()}
+  if(e.target.id==='sTipo'){const av=e.target.value==='aviso';$('#sIniBox').hidden=!av;$('#sDataLbl').textContent=av?'Fim do aviso (último dia de trabalho)':'Último dia de trabalho';return}
   if(e.target.matches('[data-contaf]')){const f=byId(e.target.dataset.contaf),antes=f.conta||'—';f.conta=e.target.value;
     registrar(`Conta de pagamento · ${f.nome}`,antes,f.conta||'—','Conta do salário');render();return toast(f.conta?`${f.nome} recebe pela ${f.conta}.`:'Conta removida.')}
   if(e.target.matches('[data-pagdata]')){const [emp,conta,q]=e.target.dataset.pagdata.split('|'),v=e.target.value.trim();
