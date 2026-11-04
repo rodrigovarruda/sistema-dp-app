@@ -586,7 +586,7 @@ const admDia=f=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f.adm||'');if(!m)ret
 const exigeDia=(f,d)=>obrig(d)&&d>=admDia(f)&&vincDia(f,d)!=='avulso';
 // Férias, perícia e suspensão programadas: período de datas (pode passar de um mês para o outro).
 // Preenche os dias vazios do mês aberto (dias corridos, com fins de semana e feriados); o restante entra quando o mês seguinte for aberto.
-const AG_COD=['FE','PE','SU'];
+const AG_COD=['FE','AT','PE','SU']; // contam em dias corridos (com fins de semana e feriados)
 // o X de sábado, domingo ou feriado é só "não trabalhado": férias, perícia e suspensão (dias corridos) passam por cima dele
 const livreParaAfast=(f,d)=>{const r=S.ponto[f.id][d];return !r||(r.c==='X'&&!obrig(d))};
 function aplicarAgenda(f,item,denovo){
@@ -606,7 +606,7 @@ function aplicarAgenda(f,item,denovo){
 const agNoMes=a=>{const de=lerData(a.de),ate=lerData(a.ate),k=ANO*12+MES;return !!de&&!!ate&&k>=de.getFullYear()*12+de.getMonth()&&k<=ate.getFullYear()*12+ate.getMonth()};
 function agendaHTML(f){
   const dp=S.perfil==='dp',ls=(f.agenda||[]).slice().sort((a,b)=>lerData(a.de)-lerData(b.de));
-  let h=`<h3 class="sub">Férias, perícia ou suspensão programadas</h3>`;
+  let h=`<h3 class="sub">Férias, atestado, perícia ou suspensão programados</h3>`;
   h+=ls.length?`<div class="lemb-lista">${ls.map(a=>`<div class="lemb"><span><span class="code c-${a.c}" style="padding:1px 6px;border-radius:4px">${a.c}</span> <b>${CODES[a.c].l}</b> de <b class="num">${esc(a.de)}</b> a <b class="num">${esc(a.ate)}</b>${a.obs?' · '+esc(a.obs):''}
       <br><span class="hint">Preenchido em: ${Object.keys(a.feitos||{}).sort().map(compLabel).join(', ')||'ainda não (o mês não foi aberto)'}</span></span>
       ${dp?`<span style="display:flex;gap:6px">${agNoMes(a)?`<button class="btn" data-agrefaz="${f.id}:${a.id}" title="Preenche de novo os dias vazios e os X de fim de semana e feriado deste mês">Preencher de novo</button>`:''}<button class="btn" data-agdel="${f.id}:${a.id}">Apagar</button></span>`:''}</div>`).join('')}</div>`:`<p class="hint" style="margin:0">Nenhum período programado.</p>`;
@@ -981,7 +981,7 @@ function trocarComp(k){
   S.aberto=null;S.cadEdit=false;S.vincEdit=false;
   registrar('Competência',antes,MES_NOME,t?'Troca de competência':'Abertura de novo mês');
   // férias, perícia e suspensão programadas que caem neste mês
-  for(const f of ALL){const r=aplicarAgenda(f);if(r.n)registrar(`${f.nome} · ${MES_NOME}`,'Dias vazios',`${r.n} dia(s) preenchidos pelo período programado`,'Férias, perícia ou suspensão programadas')}
+  for(const f of ALL){const r=aplicarAgenda(f);if(r.n)registrar(`${f.nome} · ${MES_NOME}`,'Dias vazios',`${r.n} dia(s) preenchidos pelo período programado`,'Férias, atestado, perícia ou suspensão programados')}
   render();toast(t?`Competência ${MES_NOME}.`:`Novo mês aberto: ${MES_NOME}. Cadastros e acordos continuam; o ponto começa vazio.`);
 }
 document.getElementById('selComp').addEventListener('change',e=>trocarComp(e.target.value));
@@ -1109,7 +1109,7 @@ function renderCal(){
       <div class="field"><label for="pObra">Obra</label><select id="pObra" name="obra">${Object.values(OBRAS).filter(o=>o.status!=='Concluída').map(o=>`<option ${o.nome===OBRAS[lotacao(f,NDIAS)].nome?'selected':''}>${esc(o.nome)}</option>`).join('')}</select></div>
       <div class="field"><label for="pObs">Observação (opcional)</label><input type="text" id="pObs" name="obs" placeholder="Ex.: férias"></div>
     </div>
-    <label class="ac-chk" style="font-weight:500"><input type="checkbox" id="pFds" name="fds"> Incluir sábados, domingos e feriados <span class="hint" style="font-weight:400">(férias, perícia e suspensão já incluem sempre)</span></label>
+    <label class="ac-chk" style="font-weight:500"><input type="checkbox" id="pFds" name="fds"> Incluir sábados, domingos e feriados <span class="hint" style="font-weight:400">(férias, atestado, perícia e suspensão já incluem sempre)</span></label>
     <div id="formErr" class="err"></div>
     <div class="actions" style="margin:0"><button class="btn primary" type="submit">Lançar nos dias vazios</button></div></form>`:''}
   ${S.perfil==='dp'?`<div style="margin:0 14px 16px">${agendaHTML(f)}</div>`:''}</section>`;
