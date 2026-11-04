@@ -57,6 +57,11 @@ select,input[type=text],input[type=search],textarea{background:var(--surface);bo
 textarea{resize:vertical;min-height:60px;width:100%}
 
 .status-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.st-painel{flex-basis:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.st-topo{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.st-lista{max-height:320px;overflow-y:auto}
+.st-linha{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
+.st-linha:last-child{border-bottom:0}
 .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 11px;font-size:13px;font-weight:600;background:var(--surface);border:1px solid var(--line)}
 .chip.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
 .chip.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
@@ -1068,18 +1073,52 @@ function trocarComp(k){
   render();toast(t?`Competência ${MES_NOME}.`:`Novo mês aberto: ${MES_NOME}. Cadastros e acordos continuam; o ponto começa vazio.`);
 }
 document.getElementById('selComp').addEventListener('change',e=>trocarComp(e.target.value));
-document.getElementById('statusBar').addEventListener('click',e=>{if(e.target.closest('[data-golemb]')){S.tab='funcionarios';S.cadSel='lembretes';render();$('#view').scrollIntoView({block:'start'})}});
+document.getElementById('statusBar').addEventListener('click',e=>{if(e.target.closest('[data-golemb]')){S.tab='funcionarios';S.cadSel='lembretes';render();$('#view').scrollIntoView({block:'start'});return}
+  const t=e.target.closest('[data-st]');if(t){S.stAberto=S.stAberto===t.dataset.st?null:t.dataset.st;return renderStatus()}
+  // atalhos do painel: levam à tela que resolve e fecham o painel
+  const ir=(tab,extra)=>{S.stAberto=null;S.tab=tab;extra();render();$('#view').scrollIntoView({block:'start'})};
+  const c=e.target.closest('[data-stcal]');if(c)return ir('calendario',()=>{S.calEmp=c.dataset.stcal});
+  const fi=e.target.closest('[data-stficha]');if(fi)return ir('funcionarios',()=>{S.cadSel=fi.dataset.stficha;S.cadEdit=false;S.vincEdit=false});
+  const rg=e.target.closest('[data-streg]');if(rg){ir('funcionarios',()=>{S.cadSel=rg.dataset.streg;S.cadEdit=false;S.vincEdit=true});$('#vincForm')?.scrollIntoView({block:'center'});return}
+  if(e.target.closest('[data-stvinc]'))return ir('fechamento',()=>{});
+});
 function renderStatus(){
   renderCompSel();
-  const pe=atrasados(pendencias()).length,nv=naoVinculadas().length,dv=divergAV().length;
+  const pe=atrasados(pendencias()).length,nv=naoVinculadas().length,dv=divergAV().length,nf=funcsEmp().filter(f=>S.fechF[f.id]).length,nl=funcsEmp().filter(noLimite).length;
+  // avisos com nomes viram botões: clicar abre, logo abaixo, a lista de quem é (e atalhos para resolver)
+  const bt=(k,cls,txt,tit='')=>`<button class="chip ${cls}" data-st="${k}" aria-expanded="${S.stAberto===k}" title="${tit||'Clique para ver de quem é'}">${txt} <span aria-hidden="true">${S.stAberto===k?'▴':'▾'}</span></button>`;
   $('#statusBar').innerHTML=`<span class="chip st">${MES_NOME} · ${TODAS()?'Todas as empresas':ST_LABEL[S.status[S.empresa]]}</span>
-   <span class="chip ${pe?'bad':'ok'}" title="Conta só os dias até ontem; os dias que ainda não chegaram não são cobrados">${pe?pe+' dias sem lançamento até ontem':'Sem dias pendentes até ontem'}</span>
-   <span class="chip ${nv?'warn':'ok'}">${nv?nv+' nome(s) de obra a vincular':'Obras vinculadas'}</span>
+   ${pe?bt('pend','bad',pe+' dias sem lançamento até ontem','Conta só os dias até ontem. Clique para ver de quem é'):'<span class="chip ok">Sem dias pendentes até ontem</span>'}
+   ${nv?bt('nv','warn',nv+' nome(s) de obra a vincular'):'<span class="chip ok">Obras vinculadas</span>'}
    ${dv?`<span class="chip warn">${dv} avulso(s) com dias trabalhados ≠ diárias</span>`:''}
-   ${(()=>{const n=funcsEmp().filter(f=>S.fechF[f.id]).length;return n?`<span class="chip ok">${n} de ${funcsEmp().length} funcionários fechados</span>`:''})()}
-   ${(()=>{const n=funcsEmp().filter(noLimite).length;return n?`<span class="chip bad">${n} funcionário(s) no limite do período de teste: registrar</span>`:''})()}
+   ${nf?bt('fech','ok',`${nf} de ${funcsEmp().length} funcionários fechados`):''}
+   ${nl?bt('teste','bad',`${nl} funcionário(s) no limite do período de teste: registrar`):''}
    ${(()=>{const n=S.perfil==='dp'?lembAvisar(funcsEmp()).length:0;return n?`<button class="chip warn" data-golemb="1" title="Ver os lembretes do acordo">${n} lembrete(s) de acordo para revisar</button>`:''})()}
-   ${S.perfil==='gestor'?'<span class="chip">Vendo só a equipe lotada no Residencial Ipê</span>':''}`;
+   ${S.perfil==='gestor'?'<span class="chip">Vendo só a equipe lotada no Residencial Ipê</span>':''}${painelStatus()}`;
+}
+// dias seguidos viram faixa ("03/08 a 07/08"); fim de semana e feriado no meio não quebram a faixa
+function faixasDias(ds){
+  const s=[...ds].sort((a,b)=>a-b),out=[];let i=0;
+  while(i<s.length){let j=i;while(j+1<s.length){let d=s[j]+1;while(d<s[j+1]&&!obrig(d))d++;if(d===s[j+1])j++;else break}
+    out.push(i===j?dd(s[i]):`${dd(s[i])} a ${dd(s[j])}`);i=j+1}
+  return out.join(', ');
+}
+// painel aberto abaixo dos avisos do topo
+function painelStatus(){
+  const k=S.stAberto;if(!k)return '';
+  const dp=S.perfil==='dp',emp=f=>TODAS()?` <span class="emp-chip emp-${empresaDe(f)}" style="font-size:10px;padding:1px 6px">${empresaDe(f)}</span>`:'';
+  let tit='',corpo='';
+  if(k==='pend'){const pe=atrasados(pendencias()).filter(x=>!x.antes),por=new Map();for(const x of pe)(por.get(x.f)||por.set(x.f,[]).get(x.f)).push(x.d);
+    tit=`Dias sem lançamento até ontem · ${por.size} funcionário(s)`;
+    corpo=[...por].sort((a,b)=>b[1].length-a[1].length||a[0].nome.localeCompare(b[0].nome)).map(([f,ds])=>`<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${ds.length} dia(s): ${faixasDias(ds)}</span></span><button class="btn" data-stcal="${f.id}">Abrir calendário</button></div>`).join('')}
+  else if(k==='teste'){const fs=funcsEmp().filter(noLimite);tit=`No limite do período de teste (${LIMITE_TESTE} dias) · ${fs.length} funcionário(s)`;
+    corpo=fs.map(f=>`<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${esc(f.funcao)} · ${nfmt(diasTeste(f))} dia(s) de teste desde ${esc(f.adm)}</span></span>${dp?`<span style="display:flex;gap:6px"><button class="btn primary" data-streg="${f.id}">Registrar</button><button class="btn" data-stficha="${f.id}">Abrir ficha</button></span>`:''}</div>`).join('')}
+  else if(k==='nv'){const quem=t=>funcsEmp().filter(f=>Object.values(S.ponto[f.id]||{}).some(r=>CODES[r.c].trab&&norm(r.o)===norm(t))).map(f=>f.nome);
+    const ls=naoVinculadas();tit=`Nomes de obra digitados que o sistema não reconheceu · ${ls.length}`;
+    corpo=ls.map(x=>`<div class="st-linha"><span><code>${esc(x.texto)}</code> <span class="hint">· ${x.n} dia(s) · ${quem(x.texto).map(esc).join(', ')}</span></span></div>`).join('')+(dp?`<div class="actions" style="margin:6px 0 0"><button class="btn primary" data-stvinc="1">Vincular na aba Fechamento</button></div>`:'')}
+  else if(k==='fech'){const fs=funcsEmp(),ok=fs.filter(f=>S.fechF[f.id]),falta=fs.filter(f=>!S.fechF[f.id]);tit=`Fechamento de ${MES_NOME} · ${ok.length} fechado(s), ${falta.length} em aberto`;
+    corpo=`<div class="st-linha"><span><b>Em aberto:</b> <span class="hint">${falta.map(f=>esc(f.nome)).join(', ')||'ninguém'}</span></span></div><div class="st-linha"><span><b>Fechados:</b> <span class="hint">${ok.map(f=>`${esc(f.nome)} (${esc(S.fechF[f.id].quando.split(' ')[0])})`).join(', ')}</span></span></div>`}
+  return `<div class="st-painel" role="region" aria-label="${esc(tit)}"><div class="st-topo"><b>${esc(tit)}</b><button class="btn" data-st="${k}">Fechar</button></div><div class="st-lista">${corpo||'<p class="hint">Nada a mostrar.</p>'}</div></div>`;
 }
 function cellHTML(f,d){
   const r=S.ponto[f.id][d],can=podeEditar(f,d),we=isWE(d)||!!FERIADOS_AGO[d];
