@@ -57,6 +57,8 @@ select,input[type=text],input[type=search],textarea{background:var(--surface);bo
 textarea{resize:vertical;min-height:60px;width:100%}
 
 .status-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.rel-dia{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.rel-dia select{min-width:120px}
 .st-painel{flex-basis:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 .st-topo{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
 .st-lista{max-height:320px;overflow-y:auto}
@@ -772,10 +774,11 @@ function renderSalarios(){
   $('#view').innerHTML=h;
 }
 // ---------- Relatórios: funcionários por empresa e por obra, afastados (férias, perícia, atestado, suspensão) ----------
-const AFAST=[['FE','Férias'],['PE','Perícia (INSS)'],['AT','Atestado médico'],['SU','Suspensão']];
-// dia de referência: hoje no mês atual; último dia num mês passado; dia 1 num mês futuro
-const diaRef=()=>{const h=new Date(),c=h.getFullYear()*12+h.getMonth(),k=ANO*12+MES;return k<c?NDIAS:k>c?1:h.getDate()};
-const refTxt=()=>{const h=new Date(),c=h.getFullYear()*12+h.getMonth(),k=ANO*12+MES,d=diaRef();return k===c?`hoje (${dd(d)})`:`em ${dd(d)}/${ANO}`};
+const AFAST=[['F','Falta'],['FE','Férias'],['PE','Perícia (INSS)'],['AT','Atestado médico'],['SU','Suspensão']];
+// dia de referência: o escolhido no seletor da aba; sem escolha, hoje no mês atual, último dia num mês passado, dia 1 num mês futuro
+const diaHoje=()=>{const h=new Date(),c=h.getFullYear()*12+h.getMonth(),k=ANO*12+MES;return k<c?NDIAS:k>c?1:h.getDate()};
+const diaRef=()=>S.relDiaComp===COMP&&S.relDia>=1&&S.relDia<=NDIAS?S.relDia:diaHoje();
+const refTxt=()=>{const h=new Date(),d=diaRef(),hoje=h.getFullYear()===ANO&&h.getMonth()===MES&&h.getDate()===d;return hoje?`hoje (${dd(d)})`:`em ${dd(d)}/${ANO} (${WD_LONG[dow(d)]})`};
 // período do afastamento em volta do dia: o programado, se houver; senão os dias seguidos com o mesmo código no ponto
 function periodoAfast(f,c,d){
   const dt=new Date(ANO,MES,d),a=(f.agenda||[]).find(x=>x.c===c&&lerData(x.de)<=dt&&lerData(x.ate)>=dt);if(a)return `${a.de} a ${a.ate}`;
@@ -804,10 +807,10 @@ function tabelasRelatorios(R){
   t.obras=`<table class="ben"><thead><tr><th style="text-align:left">Obra</th><th style="text-align:left">Empresa</th><th>Mensalistas</th><th>Avulsos</th><th>Total</th></tr></thead><tbody>
     ${R.obras.map(x=>`<tr><td style="text-align:left;white-space:normal">${esc(OBRAS[x.k]?.nome||'—')}</td><td style="text-align:left">${OBRAS[x.k]?.empresa||'—'}</td><td>${x.m}</td><td>${x.a}</td><td><b>${x.t}</b></td></tr>`).join('')}</tbody></table>`;
   const lin=R.agora.flatMap(g=>g.fs.map(f=>({f,g})));
-  t.agora=lin.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Situação</th><th style="text-align:left">Período</th><th style="text-align:left">Empresa</th><th style="text-align:left">Obra</th></tr></thead><tbody>
+  t.agora=lin.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Situação</th><th style="text-align:left">Período</th><th style="text-align:left">Observação</th><th style="text-align:left">Empresa</th><th style="text-align:left">Obra</th></tr></thead><tbody>
     ${lin.map(({f,g})=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${esc(f.funcao)}</span></td><td style="text-align:left"><span class="code c-${g.c}" style="padding:1px 6px;border-radius:4px">${g.c}</span> ${g.l}</td>
-      <td style="text-align:left">${periodoAfast(f,g.c,R.dr)}</td><td style="text-align:left">${empresaDe(f)}</td><td style="text-align:left;white-space:normal">${esc(OBRAS[lotacao(f,R.dr)]?.nome||'—')}</td></tr>`).join('')}</tbody></table>`
-    :`<p class="hint">Ninguém de férias, perícia, atestado ou suspensão ${refTxt()}.</p>`;
+      <td style="text-align:left">${periodoAfast(f,g.c,R.dr)}</td><td style="text-align:left;white-space:normal">${esc(S.ponto[f.id]?.[R.dr]?.obs&&S.ponto[f.id][R.dr].obs!==CODES[g.c].l?S.ponto[f.id][R.dr].obs:'')}</td><td style="text-align:left">${empresaDe(f)}</td><td style="text-align:left;white-space:normal">${esc(OBRAS[lotacao(f,R.dr)]?.nome||'—')}</td></tr>`).join('')}</tbody></table>`
+    :`<p class="hint">Ninguém com falta, férias, perícia, atestado ou suspensão ${refTxt()}.</p>`;
   t.mes=`<table class="ben"><thead><tr><th style="text-align:left">Situação</th><th>Funcionários</th><th>Dias no mês</th></tr></thead><tbody>
     ${R.mes.map(x=>`<tr><td style="text-align:left"><span class="code c-${x.c}" style="padding:1px 6px;border-radius:4px">${x.c}</span> ${x.l}</td><td>${x.n}</td><td>${x.dias}</td></tr>`).join('')}</tbody></table>`;
   t.prog=R.prog.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Situação</th><th style="text-align:left">De</th><th style="text-align:left">Até</th><th style="text-align:left">Observação</th></tr></thead><tbody>
@@ -821,12 +824,17 @@ function tabelasRelatorios(R){
 }
 function renderRelatorios(){
   const R=dadosRelatorios(),T=tabelasRelatorios(R),card=(t,v,s='')=>`<div class="ac-card"><span class="hint">${t}</span><b class="num">${v}</b>${s?`<span class="hint">${s}</span>`:''}</div>`;
-  $('#view').innerHTML=`<section class="panel"><div class="panel-head"><h2>Relatórios · ${MES_NOME}</h2><button class="btn" data-relimp="1">Imprimir</button></div>
+  const dr=diaRef(),nd=d=>`${dd(d)} ${WD_LONG[dow(d)]}`;
+  $('#view').innerHTML=`<section class="panel"><div class="panel-head"><h2>Relatórios · ${MES_NOME}</h2>
+    <span class="rel-dia"><label for="relDia" class="hint">Dia</label><button class="btn" data-reldia="-1" ${dr<=1?'disabled':''} aria-label="Dia anterior">◀</button>
+      <select id="relDia" aria-label="Dia do relatório">${Array.from({length:NDIAS},(_,i)=>i+1).map(d=>`<option value="${d}" ${d===dr?'selected':''}>${nd(d)}${isWE(d)||FERIADOS_AGO[d]?' ·':''}</option>`).join('')}</select>
+      <button class="btn" data-reldia="1" ${dr>=NDIAS?'disabled':''} aria-label="Próximo dia">▶</button><button class="btn" data-reldia="hoje">Hoje</button>
+      <button class="btn" data-relimp="1">Imprimir</button></span></div>
     <div style="padding:14px">
       <div class="ac-cards">${card('Funcionários',R.base.length,'todas as empresas')}${R.agora.map(g=>card(g.l,g.fs.length,refTxt())).join('')}${card('Em aviso prévio',R.aviso.length,'até o fim do aviso')}${card('Saídas no mês',R.saidas.length,MES_NOME)}</div>
       <h3 class="sub">Funcionários por empresa</h3><div class="scroller">${T.emp}</div>
-      <h3 class="sub">Afastados ${refTxt()}</h3><div class="scroller">${T.agora}</div>
-      <h3 class="sub">Afastamentos em ${MES_NOME}</h3><div class="scroller">${T.mes}</div>
+      <h3 class="sub">Faltas e afastados ${refTxt()}</h3><div class="scroller">${T.agora}</div>
+      <h3 class="sub">Faltas e afastamentos em ${MES_NOME}</h3><div class="scroller">${T.mes}</div>
       <h3 class="sub">Aviso prévio e saídas</h3><div class="scroller">${T.saidas}</div>
       <h3 class="sub">Programados daqui para a frente</h3><div class="scroller">${T.prog}</div>
       <h3 class="sub">Funcionários por obra <span class="hint" style="font-weight:400">(lotação ${refTxt()})</span></h3><div class="scroller">${T.obras}</div>
@@ -835,8 +843,8 @@ function renderRelatorios(){
 function imprimirRelatorios(){
   const R=dadosRelatorios(),T=tabelasRelatorios(R),h=t=>`<h2 style="font-size:13px;text-transform:uppercase;margin:14px 0 4px">${t}</h2>`;
   janelaRelatorio({titulo:`Relatório de funcionários · ${MES_NOME}`,meta:`${R.base.length} funcionário(s) · situação ${refTxt()}`,logo:EMPRESAS.CONARTE?.logo,
-    tabela:h('Funcionários por empresa')+T.emp+h(`Afastados ${refTxt()}`)+T.agora+h(`Afastamentos em ${MES_NOME}`)+T.mes+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
-    nota:'Afastados: férias (FE), perícia (PE), atestado médico (AT) e suspensão (SU) lançados no ponto ou programados.'});
+    tabela:h('Funcionários por empresa')+T.emp+h(`Faltas e afastados ${refTxt()}`)+T.agora+h(`Faltas e afastamentos em ${MES_NOME}`)+T.mes+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
+    nota:'Faltas (F) e afastados: férias (FE), perícia (PE), atestado médico (AT) e suspensão (SU) lançados no ponto ou programados.'});
 }
 // Insalubridade por obra: % sobre o salário mínimo, para todas as funções menos as marcadas na obra
 const SAL_MIN=1621;
@@ -2382,6 +2390,8 @@ $('#view').addEventListener('click',e=>{
   const va=e.target.closest('[data-veradiant]');if(va)return mostrarAdiant(byId(va.dataset.veradiant),'adiant');
   if(e.target.closest('[data-listaalelo]'))return listaAlelo();
   if(e.target.closest('[data-relimp]'))return imprimirRelatorios();
+  const rd=e.target.closest('[data-reldia]');
+  if(rd){const v=rd.dataset.reldia;S.relDia=v==='hoje'?diaHoje():Math.min(NDIAS,Math.max(1,diaRef()+(+v)));S.relDiaComp=COMP;return render()}
   const rc=e.target.closest('[data-recibos]');
   if(rc){const ids=rc.dataset.recibos==='todos'?visiveis().filter(f=>S.fechF[f.id]).map(f=>f.id):[rc.dataset.recibos];emitirRecibos(ids,rc.dataset.recibos==='todos');return}
   if(e.target.id==='fechAll'){document.querySelectorAll('.fechchk:not(:disabled)').forEach(c=>c.checked=e.target.checked);return}
@@ -2485,6 +2495,7 @@ $('#view').addEventListener('input',e=>{
 });
 $('#view').addEventListener('change',e=>{
   if(e.target.id==='planObra'){S.planObra=e.target.value;return render()}
+  if(e.target.id==='relDia'){S.relDia=+e.target.value;S.relDiaComp=COMP;return render()}
   if(e.target.id==='sTipo'){const av=e.target.value==='aviso';$('#sIniBox').hidden=!av;$('#sDataLbl').textContent=av?'Fim do aviso (último dia de trabalho)':'Último dia de trabalho';return}
   if(e.target.matches('[data-contaf]')){const f=byId(e.target.dataset.contaf),antes=f.conta||'—';f.conta=e.target.value;
     registrar(`Conta de pagamento · ${f.nome}`,antes,f.conta||'—','Conta do salário');render();return toast(f.conta?`${f.nome} recebe pela ${f.conta}.`:'Conta removida.')}
