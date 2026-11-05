@@ -345,6 +345,11 @@ table.grid .name b{white-space:normal;overflow-wrap:anywhere;line-height:1.2}
 .mes-form select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
 /* tabelas cabem na tela: títulos e nomes podem quebrar linha */
 table.ben th{white-space:normal;vertical-align:bottom}
+/* Custo por obra: compacta para caber na largura da tela */
+table.ben.custo{width:100%;font-size:12.5px}
+table.ben.custo th,table.ben.custo td{padding:7px 6px}
+table.ben.custo th{font-size:10px;letter-spacing:.03em}
+table.ben.custo td:first-child{white-space:normal;min-width:140px}
 table.ben td:first-child{white-space:normal;min-width:150px}
 table.ben th,table.ben td{padding-inline:8px}
 /* nuvem: tela de login e situação do salvamento */
@@ -975,16 +980,18 @@ function renderCusto(){
   const nomeK=k=>k==='_sem'?'Sem dia trabalhado no mês':k[0]==='?'?k.slice(1)+' (nome a vincular)':OBRAS[k]?.nome||k;
   const lista=Object.entries(obras).sort((a,b)=>b[1].tot-a[1].tot);
   const tot={dias:0,tot:0};for(const [,o] of lista){tot.dias+=o.dias;tot.tot+=o.tot;for(const [c2] of CUSTO_COLS)tot[c2]=(tot[c2]||0)+o[c2]}
-  const num=v=>v?brl(v):'—';
-  let h=`<section class="panel"><div class="panel-head"><h2>Custo por obra · ${nomeEmp()} · ${MES_NOME}</h2><span class="hint">Clique numa obra para ver o custo por funcionário.</span></div>
-    <div class="scroller"><table class="ben"><thead><tr><th>Obra</th><th>Funcionários</th><th>Dias</th>${CUSTO_COLS.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
-  if(!lista.length)h+=`<tr><td colspan="${CUSTO_COLS.length+4}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
+  const num=v=>v?nfmt2(v):'—';
+  // só as colunas com algum valor no mês aparecem (as vazias ficam escondidas para a tabela caber na tela)
+  const cols=lista.length?CUSTO_COLS.filter(([c2])=>Math.abs(tot[c2]||0)>.004):CUSTO_COLS,ocultas=CUSTO_COLS.length-cols.length;
+  let h=`<section class="panel"><div class="panel-head"><h2>Custo por obra · ${nomeEmp()} · ${MES_NOME}</h2><span class="hint">Valores em R$. Clique numa obra para ver o custo por funcionário.${ocultas?` ${ocultas} coluna(s) sem valor no mês escondida(s).`:""}</span></div>
+    <div class="scroller"><table class="ben custo"><thead><tr><th>Obra</th><th>Funcionários</th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
+  if(!lista.length)h+=`<tr><td colspan="${cols.length+4}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
   for(const [k,o] of lista){
-    h+=`<tr class="row ${empCls(k)}-bar" data-custo="${esc(k)}" tabindex="0"><td><b>${esc(nomeK(k))}</b>${OBRAS[k]?` <span class="emp-chip ${empCls(k)}" style="font-size:10px;padding:1px 6px">${OBRAS[k].empresa}</span>`:''}</td><td>${o.func.length}</td><td>${nfmt(o.dias)}</td>${CUSTO_COLS.map(([c2])=>`<td>${num(o[c2])}</td>`).join('')}<td><b>${brl(o.tot)}</b></td></tr>`;
-    if(S.custoAberto===k)h+=`<tr><td colspan="${CUSTO_COLS.length+4}" class="memo"><table class="ben"><thead><tr><th>Funcionário</th><th>Dias</th>${CUSTO_COLS.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>
-      ${o.func.sort((a,b)=>b.t-a.t).map(x=>`<tr><td>${esc(x.f.nome)}${selo(x.f)}${x.est?' <span class="tag">benefícios estimados</span>':''}${x.estSal?' <span class="tag">salário estimado</span>':''}</td><td>${nfmt(x.v.dias)}</td>${CUSTO_COLS.map(([c2])=>`<td>${num(x.v[c2])}${(c2==='sal1'||c2==='sal2')&&x.v[c2]&&!x.estSal?(()=>{const pi=pagInfo(x.f,c2==='sal1'?'q1':'q2');return `<br><span class="hint">${pi.data?pi.data.slice(0,5):'sem data'} · ${pi.conta?esc(pi.conta):'sem conta'}</span>`})():''}</td>`).join('')}<td><b>${brl(x.t)}</b></td></tr>`).join('')}</tbody></table></td></tr>`;
+    h+=`<tr class="row ${empCls(k)}-bar" data-custo="${esc(k)}" tabindex="0"><td><b>${esc(nomeK(k))}</b>${OBRAS[k]?` <span class="emp-chip ${empCls(k)}" style="font-size:10px;padding:1px 6px">${OBRAS[k].empresa}</span>`:''}</td><td>${o.func.length}</td><td>${nfmt(o.dias)}</td>${cols.map(([c2])=>`<td>${num(o[c2])}</td>`).join('')}<td><b>${nfmt2(o.tot)}</b></td></tr>`;
+    if(S.custoAberto===k)h+=`<tr><td colspan="${cols.length+4}" class="memo"><table class="ben custo"><thead><tr><th>Funcionário</th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+      ${o.func.sort((a,b)=>b.t-a.t).map(x=>`<tr><td>${esc(x.f.nome)}${selo(x.f)}${x.est?' <span class="tag">benefícios estimados</span>':''}${x.estSal?' <span class="tag">salário estimado</span>':''}</td><td>${nfmt(x.v.dias)}</td>${cols.map(([c2])=>`<td>${num(x.v[c2])}${(c2==='sal1'||c2==='sal2')&&x.v[c2]&&!x.estSal?(()=>{const pi=pagInfo(x.f,c2==='sal1'?'q1':'q2');return `<br><span class="hint">${pi.data?pi.data.slice(0,5):'sem data'} · ${pi.conta?esc(pi.conta):'sem conta'}</span>`})():''}</td>`).join('')}<td><b>${nfmt2(x.t)}</b></td></tr>`).join('')}</tbody></table></td></tr>`;
   }
-  h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${CUSTO_COLS.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}<td>${brl(tot.tot)}</td></tr></tfoot></table></div>
+  h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${cols.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}<td>${nfmt2(tot.tot)}</td></tr></tfoot></table></div>
     <div class="legend"><span>Custo atribuído à obra onde o funcionário trabalhou, na proporção dos dias. Diárias vão direto para a obra do dia.</span>
     <span>Salário: valor líquido pago em cada quinzena (aba Salários); no detalhe da obra aparecem o dia e a conta do pagamento. Sem valor informado, usa a estimativa (metade em cada quinzena): </span><span>mês completo = salário cheio; quem entrou no mês = salário ÷ 30 × dias desde o registro; menos salário ÷ 30 por falta (F); mais encargos da empresa (aba Empresas).</span>
     <span>Insalubridade: só entra quando o salário é estimado, na obra com insalubridade cadastrada (aba Obras), proporcional aos dias na obra; se o acordo do funcionário tiver insalubridade, vale a do acordo, em qualquer obra. Com o salário líquido informado, ela já está dentro dele.</span>
