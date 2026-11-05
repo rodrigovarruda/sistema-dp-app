@@ -58,6 +58,8 @@ textarea{resize:vertical;min-height:60px;width:100%}
 
 .status-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .extra-it{padding:2px 0;font-family:var(--f-body)}
+.conta-cel{display:inline-flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.conta-soma{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.2}
 .rel-dia{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .rel-dia select{min-width:120px}
 .st-painel{flex-basis:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
@@ -759,9 +761,20 @@ function renderSalarios(){
     ${S.salImpRes&&S.salImpRes.comp===COMP?`<div style="padding:10px 14px 0"><div class="lemb"><span><b>Importado da folha de ${compLabel(S.salImpRes.comp)}:</b> ${S.salImpRes.n} funcionário(s) · 1ª quinzena ${brl(S.salImpRes.q1)} · 2ª quinzena ${brl(S.salImpRes.q2)}${S.salImpRes.fora.length?`<br><span class="hint">Na folha, mas não cadastrados no sistema (${S.salImpRes.fora.length}): ${S.salImpRes.fora.map(esc).join(', ')}</span>`:''}</span><button class="btn" data-salimpok="1">Ok</button></div></div>`:''}
     <div style="padding:0 14px 6px"><h3 class="sub">Datas de pagamento por conta</h3><p class="hint" style="margin:0 0 8px">Quem recebe pela mesma conta é pago no mesmo dia: informe a data uma vez por conta e quinzena. As contas de cada empresa ficam na aba Empresas.</p>
     <div class="scroller"><table class="ben folha"><thead><tr><th>Conta</th><th>1ª quinzena · paga em</th><th>2ª quinzena · paga em</th></tr></thead><tbody>
-    ${emps.flatMap(e=>contasDe(e).map(c=>{const di=q=>dp?`<input type="text" class="folha-in" data-pagdata="${e}|${esc(c)}|${q}" data-date="1" inputmode="numeric" value="${pagData(e,c,q)}" placeholder="DD/MM/AAAA" aria-label="Data de pagamento ${q==='q1'?'1ª':'2ª'} quinzena ${esc(c)}">`:(pagData(e,c,q)||'—');
-      return `<tr><td><span class="emp-chip emp-${e}">${e}</span> <b>${esc(c)}</b></td><td>${di('q1')}</td><td>${di('q2')}</td></tr>`})).join('')}
-    </tbody></table></div></div>
+    ${emps.flatMap(e=>{
+      // total que sai de cada conta na data normal: quem recebe por ela, menos as partes pagas em outra data
+      const tq=(sel,q)=>{const ls=fs.filter(f=>empresaDe(f)===e&&sel(f));return {v:Math.round(ls.reduce((s,f)=>{const fo=S.folha[f.id]||{};return s+(+fo[q]||0)-somaExtras(fo,q)},0)*100)/100,n:ls.filter(f=>+(S.folha[f.id]?.[q])>0).length}};
+      const soma=t=>t.v?`<span class="conta-soma"><b class="num">${brl(t.v)}</b><span class="hint">${t.n} funcionário(s)</span></span>`:'';
+      const linhas=contasDe(e).map(c=>{const di=q=>`<span class="conta-cel">${soma(tq(f=>f.conta===c,q))}${dp?`<input type="text" class="folha-in" data-pagdata="${e}|${esc(c)}|${q}" data-date="1" inputmode="numeric" value="${pagData(e,c,q)}" placeholder="DD/MM/AAAA" aria-label="Data de pagamento ${q==='q1'?'1ª':'2ª'} quinzena ${esc(c)}">`:(pagData(e,c,q)||'—')}</span>`;
+        return `<tr><td><span class="emp-chip emp-${e}">${e}</span> <b>${esc(c)}</b></td><td>${di('q1')}</td><td>${di('q2')}</td></tr>`});
+      const sc1=tq(f=>!f.conta,'q1'),sc2=tq(f=>!f.conta,'q2');
+      if(sc1.v||sc2.v)linhas.push(`<tr><td><span class="emp-chip emp-${e}">${e}</span> <b style="color:var(--bad)">Sem conta escolhida</b><br><span class="hint">escolha a conta na lista de funcionários abaixo</span></td><td><span class="conta-cel">${soma(sc1)}</span></td><td><span class="conta-cel">${soma(sc2)}</span></td></tr>`);
+      return linhas}).join('')}
+    </tbody></table></div>
+    ${(()=>{const od={};for(const f of fs){if(!emps.includes(empresaDe(f)))continue;for(const x of S.folha[f.id]?.extras||[]){const k=[empresaDe(f),x.conta||'sem conta',x.data,x.q].join('|');(od[k]=od[k]||{v:0,n:0}).v+=+x.valor||0;od[k].n++}}
+      const ks=Object.keys(od).sort((a,b)=>lerData(a.split('|')[2])-lerData(b.split('|')[2]));
+      return ks.length?`<h3 class="sub" style="font-size:15px">Pagos em outra data</h3><div class="lemb-lista">${ks.map(k=>{const [e,c,d,q]=k.split('|');return `<div class="lemb"><span><span class="emp-chip emp-${e}">${e}</span> <b>${esc(c)}</b> · ${esc(d)} · ${q==='q1'?'1ª':'2ª'} quinzena</span><span><b class="num">${brl(od[k].v)}</b> <span class="hint">${od[k].n} funcionário(s)</span></span></div>`}).join('')}</div>`:''})()}
+    </div>
     <div class="scroller"><table class="ben folha"><thead><tr><th>Funcionário</th><th style="text-align:left">Conta</th><th>Salário (acordo)</th><th>1ª quinzena (líquido)</th><th>2ª quinzena (líquido)</th><th style="text-align:left">Pago em outra data</th><th>Total pago</th></tr></thead><tbody>`;
   if(!fs.length)h+='<tr><td colspan="7" class="hint" style="text-align:left">Nenhum mensalista neste mês.</td></tr>';
     for(const f of fs){const fo=S.folha[f.id]||{},A=acordo(f),tot=(+fo.q1||0)+(+fo.q2||0);t1+=+fo.q1||0;t2+=+fo.q2||0;
