@@ -57,6 +57,7 @@ select,input[type=text],input[type=search],textarea{background:var(--surface);bo
 textarea{resize:vertical;min-height:60px;width:100%}
 
 .status-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.extra-it{padding:2px 0;font-family:var(--f-body)}
 .rel-dia{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .rel-dia select{min-width:120px}
 .st-painel{flex-basis:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
@@ -761,13 +762,23 @@ function renderSalarios(){
     ${emps.flatMap(e=>contasDe(e).map(c=>{const di=q=>dp?`<input type="text" class="folha-in" data-pagdata="${e}|${esc(c)}|${q}" data-date="1" inputmode="numeric" value="${pagData(e,c,q)}" placeholder="DD/MM/AAAA" aria-label="Data de pagamento ${q==='q1'?'1ª':'2ª'} quinzena ${esc(c)}">`:(pagData(e,c,q)||'—');
       return `<tr><td><span class="emp-chip emp-${e}">${e}</span> <b>${esc(c)}</b></td><td>${di('q1')}</td><td>${di('q2')}</td></tr>`})).join('')}
     </tbody></table></div></div>
-    <div class="scroller"><table class="ben folha"><thead><tr><th>Funcionário</th><th style="text-align:left">Conta</th><th>Salário (acordo)</th><th>1ª quinzena (líquido)</th><th>2ª quinzena (líquido)</th><th>Total pago</th></tr></thead><tbody>`;
-  if(!fs.length)h+='<tr><td colspan="6" class="hint" style="text-align:left">Nenhum mensalista neste mês.</td></tr>';
-  for(const f of fs){const fo=S.folha[f.id]||{},A=acordo(f),tot=(+fo.q1||0)+(+fo.q2||0);t1+=+fo.q1||0;t2+=+fo.q2||0;
+    <div class="scroller"><table class="ben folha"><thead><tr><th>Funcionário</th><th style="text-align:left">Conta</th><th>Salário (acordo)</th><th>1ª quinzena (líquido)</th><th>2ª quinzena (líquido)</th><th style="text-align:left">Pagamentos extras</th><th>Total pago</th></tr></thead><tbody>`;
+  if(!fs.length)h+='<tr><td colspan="7" class="hint" style="text-align:left">Nenhum mensalista neste mês.</td></tr>';
+  let tEx=0;
+  for(const f of fs){const fo=S.folha[f.id]||{},A=acordo(f),ex=somaExtras(fo),tot=(+fo.q1||0)+(+fo.q2||0)+ex;t1+=+fo.q1||0;t2+=+fo.q2||0;tEx+=ex;
     const inp=q=>dp?`<input type="text" inputmode="decimal" class="folha-in" data-folha="${f.id}:${q}" value="${fo[q]?nfmt2(fo[q]):''}" placeholder="0,00" aria-label="${q==='q1'?'1ª':'2ª'} quinzena de ${esc(f.nome)}">`:(fo[q]?brl(fo[q]):'—');
     const cs=contasDe(empresaDe(f)),conta=dp?`<select data-contaf="${f.id}" aria-label="Conta de pagamento de ${esc(f.nome)}"><option value="">Escolher…</option>${cs.map(c=>`<option ${c===f.conta?'selected':''}>${esc(c)}</option>`).join('')}${f.conta&&!cs.includes(f.conta)?`<option selected>${esc(f.conta)}</option>`:''}</select>`:(f.conta?esc(f.conta):'—');
-    h+=`<tr><td><b>${esc(f.nome)}</b>${selo(f)}<br><span class="hint">${esc(f.funcao)}</span></td><td style="text-align:left">${conta}</td><td>${A.salario?brl(A.salario):'—'}</td><td>${inp('q1')}</td><td>${inp('q2')}${fo.pensao?`<br><span class="hint">inclui pensão alimentícia ${brl(fo.pensao)}</span>`:''}</td><td><b>${tot?brl(tot):'—'}</b></td></tr>`}
-  h+=`</tbody><tfoot><tr><td>Total</td><td></td><td></td><td>${brl(t1)}</td><td>${brl(t2)}</td><td>${brl(t1+t2)}</td></tr></tfoot></table></div>
+    h+=`<tr><td><b>${esc(f.nome)}</b>${selo(f)}<br><span class="hint">${esc(f.funcao)}</span></td><td style="text-align:left">${conta}</td><td>${A.salario?brl(A.salario):'—'}</td><td>${inp('q1')}</td><td>${inp('q2')}${fo.pensao?`<br><span class="hint">inclui pensão alimentícia ${brl(fo.pensao)}</span>`:''}</td>
+      <td style="text-align:left;white-space:normal">${(fo.extras||[]).map(x=>`<div class="extra-it"><b class="num">${brl(x.valor)}</b> <span class="hint">${x.q==='q1'?'1ª':'2ª'} quinzena · ${esc(x.data)}${x.conta?' · '+esc(x.conta):''} · ${esc(x.motivo)}</span>${dp?` <button class="link-btn" data-extradel="${f.id}:${x.id}" aria-label="Apagar pagamento extra">apagar</button>`:''}</div>`).join('')}${dp&&S.extraEdit!==f.id?`<button class="link-btn" data-extraadd="${f.id}">+ Extra</button>`:''}</td>
+      <td><b>${tot?brl(tot):'—'}</b></td></tr>`;
+    if(dp&&S.extraEdit===f.id)h+=`<tr><td colspan="7"><form id="extraForm" class="lemb-form" data-f="${f.id}" style="margin:0"><b style="flex-basis:100%">Pagamento extra para ${esc(f.nome)} · ${MES_NOME}</b>
+      <div class="field"><label for="exQ">Quinzena</label><select id="exQ" name="q"><option value="q1">1ª quinzena</option><option value="q2">2ª quinzena</option></select></div>
+      <div class="field"><label for="exVal">Valor (R$)</label><input type="text" id="exVal" name="valor" inputmode="decimal" placeholder="0,00" style="max-width:120px"></div>
+      <div class="field"><label for="exData">Data da transferência</label><input type="text" id="exData" name="data" data-date="1" inputmode="numeric" placeholder="DD/MM/AAAA" style="max-width:130px"></div>
+      <div class="field"><label for="exConta">Conta</label><select id="exConta" name="conta"><option value="">—</option>${contasDe(empresaDe(f)).map(c=>`<option ${c===f.conta?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+      <div class="field" style="flex:1"><label for="exMot">Motivo (obrigatório)</label><input type="text" id="exMot" name="motivo" placeholder="Ex.: volta de férias que ficou fora da folha"></div>
+      <button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-extraadd="">Cancelar</button><div id="formErr" class="err" style="flex-basis:100%"></div></form></td></tr>`}
+  h+=`</tbody><tfoot><tr><td>Total</td><td></td><td></td><td>${brl(t1)}</td><td>${brl(t2)}</td><td style="text-align:left">${tEx?brl(tEx):'—'}</td><td>${brl(t1+t2+tEx)}</td></tr></tfoot></table></div>
     <div class="legend"><span>Valor líquido = o que o funcionário recebeu (já com descontos de INSS, IR e faltas enviados à contabilidade).</span><span>Pensão alimentícia: é descontada do funcionário, mas a empresa paga ao beneficiário; por isso entra somada ao líquido da 2ª quinzena (o que sai da conta).</span>
     <span>O custo por obra considera o que saiu da conta da empresa: aqui entra o líquido pago ao funcionário. As guias de INSS e FGTS podem ser informadas logo abaixo.</span>
     <span>Quem ficar sem valor informado aparece no custo por obra com o salário estimado pelo acordo.</span></div>
@@ -866,6 +877,8 @@ function imprimirRelatorios(){
     tabela:h('Funcionários por empresa')+T.emp+h(`Faltas e afastados ${refTxt()}`)+T.agora+h(`Faltas e afastamentos em ${MES_NOME}`)+T.mes+h(`Avulsos em ${MES_NOME}`)+T.avulsos+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
     nota:'Faltas (F) e afastados: férias (FE), perícia (PE), atestado médico (AT) e suspensão (SU) lançados no ponto ou programados.'});
 }
+// Pagamentos extras do mês (transferência à parte numa quinzena: esquecimento ou erro da folha); entram no total e no custo por obra
+const somaExtras=(fo,q)=>Math.round((fo?.extras||[]).filter(x=>!q||x.q===q).reduce((s,x)=>s+(+x.valor||0),0)*100)/100;
 // Importa os salários pagos (1ª quinzena = adiantamento, 2ª = líquido) do arquivo gerado a partir do PDF da folha; casa pelo CPF
 function importarSalarios(d){
   if(d?.tipo!=='sistemaDP.salarios'||!Array.isArray(d.itens))throw new Error('o arquivo não é de salários da folha');
@@ -951,6 +964,8 @@ function custoFunc(f,guia=0){
       fatorIns=Math.max(0,diasVinc-nF)/30*(1+(+E.encargos||0)/100);
       // periculosidade: % do próprio salário, na mesma proporção, rateada pelas obras como o salário
       if(A.peric)it.peric=A.salario*A.peric/100*fatorIns}
+    // pagamentos extras (transferência à parte) entram na quinzena em que foram pagos
+    it.sal1+=somaExtras(fo,'q1');it.sal2+=somaExtras(fo,'q2');
     if(c.itens.bonif)it.bonif=c.itens.bonif.valor;
     // verbas referentes a este mês: adiantamento/cesta do registro, ou fechamento do mês anterior
     if(diaEntrada(f)){const a=calcAdiant(f);if(a&&f.adiantQuando)for(const x of a.itens)it[x.k]+=x.valor;if(temCestaReg(f))it.cesta+=valorCesta(f)}
@@ -1811,6 +1826,16 @@ $('#view').addEventListener('submit',e=>{
     if(!tipos.length)return toast('Marque pelo menos um tipo de recibo.');
     S.recTipos=tipos;return recibosDoMes(fm.esc.value,tipos);
   }
+  if(fm.id==='extraForm'){
+    const f=byId(fm.dataset.f),v=parseBRL(fm.valor.value),data=fm.data.value.trim(),motivo=fm.motivo.value.trim().replace(/\s+/g,' ');
+    if(!(v>0))return err('Informe o valor transferido.');
+    if(!lerData(data))return err('Informe a data no formato DD/MM/AAAA.');
+    if(motivo.length<4)return err('Escreva o motivo do pagamento extra.');
+    S.folha=S.folha||{};const fo=S.folha[f.id]=S.folha[f.id]||{};
+    (fo.extras=fo.extras||[]).push({id:'x'+Date.now(),q:fm.q.value,valor:Math.round(v*100)/100,data,conta:fm.conta.value,motivo,quando:new Date().toLocaleDateString('pt-BR'),quem:'DP'});
+    registrar(`Pagamento extra · ${f.nome} · ${fm.q.value==='q1'?'1ª':'2ª'} quinzena de ${MES_NOME}`,'—',`${brl(v)} em ${data}${fm.conta.value?' · '+fm.conta.value:''}`,motivo);
+    S.extraEdit=null;render();return toast(`Pagamento extra de ${brl(v)} registrado para ${f.nome}. Já entra no custo por obra.`);
+  }
   if(fm.id==='pagForm'){S.pagForma=fm.forma.value;return relatorioPagamentos(fm.esc.value,fm.forma.value)}
   if(fm.id==='faltasForm'){
     const de=lerData(fm.de.value),ate=lerData(fm.ate.value);
@@ -2525,6 +2550,12 @@ $('#view').addEventListener('click',e=>{
   if(lb){const [id,lid]=(lb.dataset.lembok||lb.dataset.lembdel).split(':'),f=byId(id),l=f?.lembretes?.find(x=>x.id===lid);if(!l)return;
     if(lb.dataset.lembok){l.feito=new Date().toLocaleDateString('pt-BR');registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Feito','Lembrete do acordo concluído');render();return toast('Lembrete concluído.')}
     f.lembretes=f.lembretes.filter(x=>x!==l);registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Apagado','Lembrete do acordo');render();return toast('Lembrete apagado.')}
+  const xa=e.target.closest('[data-extraadd]');
+  if(xa){S.extraEdit=xa.dataset.extraadd||null;render();if(S.extraEdit)$('#extraForm')?.scrollIntoView({block:'center'});return}
+  const xd=e.target.closest('[data-extradel]');
+  if(xd){const [id,xid]=xd.dataset.extradel.split(':'),f=byId(id),fo=S.folha?.[id],x=fo?.extras?.find(y=>y.id===xid);if(!x)return;
+    if(!confirm(`Apagar o pagamento extra de ${brl(x.valor)} (${x.data}) de ${f.nome}?`))return;
+    fo.extras=fo.extras.filter(y=>y!==x);registrar(`Pagamento extra · ${f.nome}`,`${brl(x.valor)} em ${x.data} · ${x.motivo}`,'Apagado','Pagamento extra');render();return toast('Pagamento extra apagado.')}
   if(e.target.closest('[data-salimp]')){$('#salFile').value='';return $('#salFile').click()}
   if(e.target.closest('[data-salimpok]')){S.salImpRes=null;return render()}
   if(e.target.closest('[data-impfolha]')){$('#impFile').value='';return $('#impFile').click()}
