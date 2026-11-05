@@ -829,7 +829,8 @@ function renderRelatorios(){
     <span class="rel-dia"><label for="relDia" class="hint">Dia</label><button class="btn" data-reldia="-1" ${dr<=1?'disabled':''} aria-label="Dia anterior">◀</button>
       <select id="relDia" aria-label="Dia do relatório">${Array.from({length:NDIAS},(_,i)=>i+1).map(d=>`<option value="${d}" ${d===dr?'selected':''}>${nd(d)}${isWE(d)||FERIADOS_AGO[d]?' ·':''}</option>`).join('')}</select>
       <button class="btn" data-reldia="1" ${dr>=NDIAS?'disabled':''} aria-label="Próximo dia">▶</button><button class="btn" data-reldia="hoje">Hoje</button>
-      <button class="btn" data-relimp="1">Imprimir</button></span></div>
+      <button class="btn" data-relimp="1">Imprimir</button><button class="btn primary" data-faltasabrir="1">Relatório por período</button></span></div>
+    ${S.faltasForm?`<div style="padding:12px 14px 0">${faltasFormHTML()}</div>`:''}
     <div style="padding:14px">
       <div class="ac-cards">${card('Funcionários',R.base.length,'todas as empresas')}${R.agora.map(g=>card(g.l,g.fs.length,refTxt())).join('')}${card('Em aviso prévio',R.aviso.length,'até o fim do aviso')}${card('Saídas no mês',R.saidas.length,MES_NOME)}</div>
       <h3 class="sub">Funcionários por empresa</h3><div class="scroller">${T.emp}</div>
@@ -1142,13 +1143,8 @@ function renderPlanilha(){
   // com obra escolhida, mostra quem está nela em qualquer empresa do grupo
   const fs=S.planObra?ALL.filter(f=>ativoNoMes(f)&&(S.perfil==='dp'||f.lot.some(l=>l.obra==='ipe'))&&naObra(f)):visiveis();
   const filtroObra=`<label class="ac-chk" style="font-weight:600">Obra <select id="planObra" aria-label="Mostrar só os funcionários da obra"><option value="">Todas</option>${Object.entries(OBRAS).sort((a,b)=>a[1].nome.localeCompare(b[1].nome)).map(([k,o])=>`<option value="${k}" ${k===S.planObra?'selected':''}>${esc(o.nome)} · ${o.empresa}</option>`).join('')}</select></label>`;
-  let h=`<section class="panel"><div class="panel-head"><h2>Planilha do mês · ${S.planObra?esc(OBRAS[S.planObra].nome):nomeEmp()} · ${MES_NOME}</h2><span class="hint">Clique num dia para lançar ou corrigir. A mesma informação aparece no calendário individual.</span>${filtroObra}${S.perfil==='dp'&&(TODAS()||!['aguardando','fechado'].includes(S.status[S.empresa]))?'<button class="btn" data-xfds="1">Marcar X nos fins de semana vazios</button>':''}<button class="btn" data-plannomes="1">${S.planNomes?'Ver o mês inteiro':'Ver nomes completos das obras'}</button><button class="btn" data-faltasabrir="1">Relatório de faltas</button></div>
-    ${S.faltasForm?`<form id="faltasForm" class="mes-form"><b>Relatório de faltas</b>
-      <label>De <input type="text" name="de" data-date="1" inputmode="numeric" value="${S.faltasDe||'01/'+MM+'/'+ANO}" placeholder="DD/MM/AAAA" size="10"></label>
-      <label>até <input type="text" name="ate" data-date="1" inputmode="numeric" value="${S.faltasAte||NDIAS+'/'+MM+'/'+ANO}" placeholder="DD/MM/AAAA" size="10"></label>
-      <select name="esc" aria-label="Abrangência">${opcoesRel()}</select>
-      <label class="ac-chk" style="font-weight:500"><input type="checkbox" name="at" ${S.faltasAT?'checked':''}> Incluir atestados (AT) e perícias (PE)</label>
-      <button class="btn primary" type="submit">Gerar relatório</button><button class="btn" type="button" data-faltasfechar="1">Fechar</button></form>`:''}`;
+  let h=`<section class="panel"><div class="panel-head"><h2>Planilha do mês · ${S.planObra?esc(OBRAS[S.planObra].nome):nomeEmp()} · ${MES_NOME}</h2><span class="hint">Clique num dia para lançar ou corrigir. A mesma informação aparece no calendário individual.</span>${filtroObra}${S.perfil==='dp'&&(TODAS()||!['aguardando','fechado'].includes(S.status[S.empresa]))?'<button class="btn" data-xfds="1">Marcar X nos fins de semana vazios</button>':''}<button class="btn" data-plannomes="1">${S.planNomes?'Ver o mês inteiro':'Ver nomes completos das obras'}</button><button class="btn" data-faltasabrir="1">Relatório por período</button></div>
+    ${S.faltasForm?faltasFormHTML():''}`;
   if(!fs.length){$('#view').innerHTML=h+`<div class="empty">${S.planObra?'Nenhum funcionário lotado ou com dia trabalhado nesta obra no mês.':'Nenhum funcionário no seu escopo.'}</div></section>`;return}
   h+=`<div class="scroller plan-scroll" id="planScroll"><table class="grid${S.planNomes?'':' compacta'}"><thead><tr><th class="name">Funcionário</th>`;
   for(let d=1;d<=NDIAS;d++)h+=`<th class="${isWE(d)||FERIADOS_AGO[d]?'we':''} num" ${FERIADOS_AGO[d]?`title="Feriado: ${FERIADOS_AGO[d]}"`:''}>${d}<span class="wd">${FERIADOS_AGO[d]?'FER':WD[dow(d)]}</span></th>`;
@@ -1313,25 +1309,40 @@ function imprimirBen(escolha){
 const pontoComp=k=>k===COMP?S.ponto:S.comps?.[k]?.ponto;
 const lerData=s=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s||'').trim());if(!m)return null;const d=new Date(+m[3],+m[2]-1,+m[1]);return d.getDate()===+m[1]&&d.getMonth()===+m[2]-1?d:null};
 const fmtData=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-function relatorioFaltas(de,ate,escolha,comAT){
+// tipos do relatório por período (códigos do ponto que entram)
+const REL_TIPOS={fsu:['Faltas e suspensões',['F','SU']],F:['Só faltas',['F']],SU:['Só suspensões',['SU']],AT:['Só atestados',['AT']],PE:['Só perícias',['PE']],FE:['Só férias',['FE']],
+  afast:['Faltas, suspensões, atestados e perícias',['F','SU','AT','PE']],todos:['Todos (com férias)',['F','SU','AT','PE','FE']]};
+const REL_COL={F:'Faltas (F)',SU:'Suspensões (SU)',AT:'Atestados (AT)',PE:'Perícias (PE)',FE:'Férias (FE)'};
+function faltasFormHTML(){
+  return `<form id="faltasForm" class="mes-form"><b>Relatório por período</b>
+      <label>De <input type="text" name="de" data-date="1" inputmode="numeric" value="${S.faltasDe||'01/'+MM+'/'+ANO}" placeholder="DD/MM/AAAA" size="10"></label>
+      <label>até <input type="text" name="ate" data-date="1" inputmode="numeric" value="${S.faltasAte||NDIAS+'/'+MM+'/'+ANO}" placeholder="DD/MM/AAAA" size="10"></label>
+      <select name="tipo" aria-label="Tipo">${Object.entries(REL_TIPOS).map(([k,[l]])=>`<option value="${k}" ${k===(S.faltasTipo||'fsu')?'selected':''}>${l}</option>`).join('')}</select>
+      <select name="esc" aria-label="Abrangência">${opcoesRel()}</select>
+      <button class="btn primary" type="submit">Gerar relatório</button><button class="btn" type="button" data-faltasfechar="1">Fechar</button></form>`;
+}
+function relatorioFaltas(de,ate,escolha,tipoRel){
+  const [nomeT,cods]=REL_TIPOS[tipoRel]||REL_TIPOS.fsu;
   const {tipo,val,fs,titulo}=filtroRel(escolha,true),reg={},semDados=new Set();
   for(const d=new Date(de);d<=ate;d.setDate(d.getDate()+1)){
     const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),p=pontoComp(k);
     if(!p){semDados.add(MESES_LONGO[d.getMonth()]+'/'+d.getFullYear());continue}
-    // suspensões entram sempre; perícias junto com os atestados
-    for(const f of fs){const r=p[f.id]?.[d.getDate()];if(r&&(r.c==='F'||r.c==='SU'||(comAT&&(r.c==='AT'||r.c==='PE'))))(reg[f.id]=reg[f.id]||[]).push({data:fmtData(d).slice(0,5),c:r.c,obs:r.obs||''})}
+    for(const f of fs){const r=p[f.id]?.[d.getDate()];if(r&&cods.includes(r.c))(reg[f.id]=reg[f.id]||[]).push({data:fmtData(d).slice(0,5),c:r.c,obs:r.obs&&r.obs!==CODES[r.c].l?r.obs:''})}
   }
   const conta=(x,c)=>x.filter(i=>i.c===c).length;
-  const linhas=fs.filter(f=>reg[f.id]).map(f=>({f,its:reg[f.id],nF:conta(reg[f.id],'F'),nSU:conta(reg[f.id],'SU'),nAT:conta(reg[f.id],'AT'),nPE:conta(reg[f.id],'PE')}))
-    .sort((a,b)=>b.nF-a.nF||b.nSU-a.nSU||b.nAT-a.nAT||a.f.nome.localeCompare(b.f.nome));
+  const linhas=fs.filter(f=>reg[f.id]).map(f=>({f,its:reg[f.id],n:Object.fromEntries(cods.map(c=>[c,conta(reg[f.id],c)]))}))
+    .sort((a,b)=>{for(const c of cods)if(b.n[c]!==a.n[c])return b.n[c]-a.n[c];return a.f.nome.localeCompare(b.f.nome)});
   const E=EMPRESAS[tipo==='emp'?val:tipo==='obra'?OBRAS[val]?.empresa:'CONARTE']||{};
-  const dias=x=>x.its.map(i=>`${i.data}${i.c!=='F'?` (${i.c})`:''}${i.obs?` <span class="sub">${esc(i.obs)}</span>`:''}`).join(', ');
-  const corpo=linhas.map(x=>`<tr><td><b>${esc(x.f.nome)}</b><br><span class="sub">${esc(x.f.funcao)} · ${empresaDe(x.f)} · ${esc(OBRAS[lotacao(x.f,NDIAS)]?.nome||'—')}</span></td><td>${x.nF}</td><td>${x.nSU}</td>${comAT?`<td>${x.nAT}</td><td>${x.nPE}</td>`:''}<td style="text-align:left;white-space:normal">${dias(x)}</td></tr>`).join('');
+  // dias seguidos com o mesmo código viram faixa (ex.: 03/11 a 07/11 (PE))
+  const dias=x=>{const out=[];for(const i of x.its){const u=out[out.length-1];if(u&&u.c===i.c&&!i.obs&&!u.obs&&u.fimN+1===+i.data.slice(0,2)&&u.mes===i.data.slice(3)){u.fim=i.data;u.fimN++}else out.push({...i,fim:null,fimN:+i.data.slice(0,2),mes:i.data.slice(3)})}
+    return out.map(i=>`${i.data}${i.fim?' a '+i.fim:''}${cods.length>1&&i.c!=='F'?` (${i.c})`:''}${i.obs&&i.obs!==CODES[i.c]?.l?` <span class="sub">${esc(i.obs)}</span>`:''}`).join(', ')};
+  const corpo=linhas.map(x=>`<tr><td><b>${esc(x.f.nome)}</b><br><span class="sub">${esc(x.f.funcao)} · ${empresaDe(x.f)} · ${esc(OBRAS[lotacao(x.f,NDIAS)]?.nome||'—')}</span></td>${cods.map(c=>`<td>${x.n[c]}</td>`).join('')}<td style="text-align:left;white-space:normal">${dias(x)}</td></tr>`).join('');
   const periodo=`${fmtData(de)} a ${fmtData(ate)}`;
-  janelaRelatorio({titulo:`Relatório de faltas · ${titulo}`,meta:`Período ${periodo} · ${linhas.length} funcionário(s) com ${comAT?'faltas, suspensões, atestados ou perícias':'faltas ou suspensões'}`,logo:E.logo,
-    tabela:`<table><thead><tr><th>Funcionário</th><th>Faltas (F)</th><th>Suspensões (SU)</th>${comAT?'<th>Atestados (AT)</th><th>Perícias (PE)</th>':''}<th style="text-align:left">Dias</th></tr></thead><tbody>${corpo||`<tr><td colspan="${comAT?6:4}">Nenhuma ${comAT?'falta, suspensão, atestado ou perícia':'falta ou suspensão'} no período.</td></tr>`}</tbody>
-      <tfoot><tr><td>Total</td>${['nF','nSU',...(comAT?['nAT','nPE']:[])].map(k=>`<td>${linhas.reduce((s,x)=>s+x[k],0)}</td>`).join('')}<td></td></tr></tfoot></table>`,
-    nota:`Faltas = dias marcados F (falta não justificada) no ponto. Suspensões = dias marcados SU. ${comAT?'Atestados = dias marcados AT; perícias = dias marcados PE. ':''}Faltas justificadas lançadas como X não entram.${semDados.size?` <b>Atenção: sem ponto lançado no sistema em ${[...semDados].join(', ')}; esses dias não foram considerados.</b>`:''}`});
+  const nomeR=cods.length===1?REL_COL[cods[0]].replace(/ \(.*/,'').toLowerCase():{afast:'faltas e afastamentos',todos:'faltas, afastamentos e férias'}[tipoRel]||nomeT.toLowerCase();
+  janelaRelatorio({titulo:`Relatório de ${nomeR} · ${titulo}`,meta:`Período ${periodo} · ${linhas.length} funcionário(s)`,logo:E.logo,
+    tabela:`<table><thead><tr><th>Funcionário</th>${cods.map(c=>`<th>${REL_COL[c]}</th>`).join('')}<th style="text-align:left">Dias</th></tr></thead><tbody>${corpo||`<tr><td colspan="${cods.length+2}">Nada no período.</td></tr>`}</tbody>
+      <tfoot><tr><td>Total</td>${cods.map(c=>`<td>${linhas.reduce((s,x)=>s+x.n[c],0)}</td>`).join('')}<td></td></tr></tfoot></table>`,
+    nota:`Contados os dias marcados no ponto: ${cods.map(c=>`${c} = ${CODES[c].l.toLowerCase()}`).join('; ')}.${cods.includes('F')?' Faltas justificadas lançadas como X não entram.':''}${semDados.size?` <b>Atenção: sem ponto lançado no sistema em ${[...semDados].join(', ')}; esses dias não foram considerados.</b>`:''}`});
 }
 // Abre um relatório pronto para imprimir numa aba própria (cabeçalho com logo, tabela e nota)
 function janelaRelatorio({titulo,meta,logo,tabela,nota,deitado}){
@@ -1724,8 +1735,8 @@ $('#view').addEventListener('submit',e=>{
     if(!de||!ate)return toast('Informe as duas datas no formato DD/MM/AAAA.');
     if(ate<de)return toast('A data final precisa ser depois da inicial.');
     if((ate-de)/864e5>366)return toast('Escolha um período de no máximo 1 ano.');
-    S.faltasDe=fm.de.value.trim();S.faltasAte=fm.ate.value.trim();S.faltasAT=fm.at.checked;
-    return relatorioFaltas(de,ate,fm.esc.value,fm.at.checked);
+    S.faltasDe=fm.de.value.trim();S.faltasAte=fm.ate.value.trim();S.faltasTipo=fm.tipo.value;
+    return relatorioFaltas(de,ate,fm.esc.value,fm.tipo.value);
   }
   if(fm.id==='dadosForm'){
     const f=byId(S.dadosEdit),nome=fm.nome.value.trim().replace(/\s+/g,' '),cpf=fm.cpf.value.trim(),adm=fm.adm.value.trim(),motivo=fm.motivo.value.trim();
