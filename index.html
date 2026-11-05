@@ -768,7 +768,8 @@ function renderSalarios(){
       const linhas=contasDe(e).map(c=>{const di=q=>`<span class="conta-cel">${soma(tq(f=>f.conta===c,q))}${dp?`<input type="text" class="folha-in" data-pagdata="${e}|${esc(c)}|${q}" data-date="1" inputmode="numeric" value="${pagData(e,c,q)}" placeholder="DD/MM/AAAA" aria-label="Data de pagamento ${q==='q1'?'1ª':'2ª'} quinzena ${esc(c)}">`:(pagData(e,c,q)||'—')}</span>`;
         return `<tr><td><span class="emp-chip emp-${e}">${e}</span> <b>${esc(c)}</b></td><td>${di('q1')}</td><td>${di('q2')}</td></tr>`});
       const sc1=tq(f=>!f.conta,'q1'),sc2=tq(f=>!f.conta,'q2');
-      if(sc1.v||sc2.v)linhas.push(`<tr><td><span class="emp-chip emp-${e}">${e}</span> <b style="color:var(--bad)">Sem conta escolhida</b><br><span class="hint">escolha a conta na lista de funcionários abaixo</span></td><td><span class="conta-cel">${soma(sc1)}</span></td><td><span class="conta-cel">${soma(sc2)}</span></td></tr>`);
+      const semConta=fs.filter(f=>empresaDe(f)===e&&!f.conta&&((+S.folha[f.id]?.q1||0)||(+S.folha[f.id]?.q2||0)));
+      if(sc1.v||sc2.v)linhas.push(`<tr><td style="white-space:normal"><span class="emp-chip emp-${e}">${e}</span> <b style="color:var(--bad)">Sem conta escolhida</b><br><span class="hint">Escolha a conta de pagamento de: </span>${semConta.map(f=>`<button class="link-btn" data-irconta="${f.id}">${esc(f.nome)}</button>`).join(', ')}</td><td><span class="conta-cel">${soma(sc1)}</span></td><td><span class="conta-cel">${soma(sc2)}</span></td></tr>`);
       return linhas}).join('')}
     </tbody></table></div>
     ${(()=>{const od={};for(const f of fs){if(!emps.includes(empresaDe(f)))continue;for(const x of S.folha[f.id]?.extras||[]){const k=[empresaDe(f),x.conta||'sem conta',x.data,x.q].join('|');(od[k]=od[k]||{v:0,n:0}).v+=+x.valor||0;od[k].n++}}
@@ -2561,6 +2562,8 @@ $('#view').addEventListener('click',e=>{
   if(lb){const [id,lid]=(lb.dataset.lembok||lb.dataset.lembdel).split(':'),f=byId(id),l=f?.lembretes?.find(x=>x.id===lid);if(!l)return;
     if(lb.dataset.lembok){l.feito=new Date().toLocaleDateString('pt-BR');registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Feito','Lembrete do acordo concluído');render();return toast('Lembrete concluído.')}
     f.lembretes=f.lembretes.filter(x=>x!==l);registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Apagado','Lembrete do acordo');render();return toast('Lembrete apagado.')}
+  const ic=e.target.closest('[data-irconta]');
+  if(ic){const s=document.querySelector(`[data-contaf="${ic.dataset.irconta}"]`);if(s){s.scrollIntoView({block:'center'});s.focus()}return}
   const xa=e.target.closest('[data-extraadd]');
   if(xa){S.extraEdit=xa.dataset.extraadd||null;render();if(S.extraEdit)$('#extraForm')?.scrollIntoView({block:'center'});return}
   const xd=e.target.closest('[data-extradel]');
