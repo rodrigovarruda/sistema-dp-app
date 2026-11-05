@@ -749,7 +749,8 @@ function renderSalarios(){
   const fs=visiveis().filter(f=>f.vh.some(x=>x.vinc==='mensalista')),dp=S.perfil==='dp';
   S.folha=S.folha||{};let t1=0,t2=0;
   const emps=TODAS()?Object.keys(FUNC):[S.empresa];
-  let h=`<section class="panel"><div class="panel-head"><h2>Salários pagos · ${nomeEmp()} · ${MES_NOME}</h2><span class="hint">Digite o valor líquido que saiu da conta da empresa para cada mensalista. Os valores entram no custo por obra.</span></div>
+  let h=`<section class="panel"><div class="panel-head"><h2>Salários pagos · ${nomeEmp()} · ${MES_NOME}</h2><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="hint">Digite o valor líquido que saiu da conta da empresa para cada mensalista, ou importe da folha da contabilidade. Os valores entram no custo por obra.</span>${dp?'<button class="btn primary" data-salimp="1">Importar da folha</button><input type="file" id="salFile" accept=".json,application/json" hidden data-salfile="1">':''}</span></div>
+    ${S.salImpRes&&S.salImpRes.comp===COMP?`<div style="padding:10px 14px 0"><div class="lemb"><span><b>Importado da folha de ${compLabel(S.salImpRes.comp)}:</b> ${S.salImpRes.n} funcionário(s) · 1ª quinzena ${brl(S.salImpRes.q1)} · 2ª quinzena ${brl(S.salImpRes.q2)}${S.salImpRes.fora.length?`<br><span class="hint">Na folha, mas não cadastrados no sistema (${S.salImpRes.fora.length}): ${S.salImpRes.fora.map(esc).join(', ')}</span>`:''}</span><button class="btn" data-salimpok="1">Ok</button></div></div>`:''}
     <div style="padding:0 14px 6px"><h3 class="sub">Datas de pagamento por conta</h3><p class="hint" style="margin:0 0 8px">Quem recebe pela mesma conta é pago no mesmo dia: informe a data uma vez por conta e quinzena. As contas de cada empresa ficam na aba Empresas.</p>
     <div class="scroller"><table class="ben folha"><thead><tr><th>Conta</th><th>1ª quinzena · paga em</th><th>2ª quinzena · paga em</th></tr></thead><tbody>
     ${emps.flatMap(e=>contasDe(e).map(c=>{const di=q=>dp?`<input type="text" class="folha-in" data-pagdata="${e}|${esc(c)}|${q}" data-date="1" inputmode="numeric" value="${pagData(e,c,q)}" placeholder="DD/MM/AAAA" aria-label="Data de pagamento ${q==='q1'?'1ª':'2ª'} quinzena ${esc(c)}">`:(pagData(e,c,q)||'—');
@@ -859,6 +860,22 @@ function imprimirRelatorios(){
   janelaRelatorio({titulo:`Relatório de funcionários · ${MES_NOME}`,meta:`${R.base.length} funcionário(s) · situação ${refTxt()}`,logo:EMPRESAS.CONARTE?.logo,
     tabela:h('Funcionários por empresa')+T.emp+h(`Faltas e afastados ${refTxt()}`)+T.agora+h(`Faltas e afastamentos em ${MES_NOME}`)+T.mes+h(`Avulsos em ${MES_NOME}`)+T.avulsos+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
     nota:'Faltas (F) e afastados: férias (FE), perícia (PE), atestado médico (AT) e suspensão (SU) lançados no ponto ou programados.'});
+}
+// Importa os salários pagos (1ª quinzena = adiantamento, 2ª = líquido) do arquivo gerado a partir do PDF da folha; casa pelo CPF
+function importarSalarios(d){
+  if(d?.tipo!=='sistemaDP.salarios'||!Array.isArray(d.itens))throw new Error('o arquivo não é de salários da folha');
+  if(d.comp!==COMP)return toast(`Esta folha é de ${compLabel(d.comp)}. Troque a competência no topo para ${compLabel(d.comp)} e importe de novo.`);
+  const porCpf=new Map(ALL.filter(f=>soDig(f.cpf)).map(f=>[soDig(f.cpf),f]));
+  const ok=[],fora=[];let ja=0;
+  for(const x of d.itens){const f=porCpf.get(soDig(x.cpf));if(!f){fora.push(x.nome);continue}const fo=S.folha?.[f.id];if(fo&&((+fo.q1||0)||(+fo.q2||0)))ja++;ok.push({f,x})}
+  if(!ok.length)return toast('Nenhum CPF do arquivo foi encontrado entre os funcionários cadastrados.');
+  if(!confirm(`Importar os salários de ${compLabel(d.comp)} de ${ok.length} funcionário(s)?${ja?`\n\n${ja} já tinham valores digitados, que serão substituídos pelos da folha.`:''}${fora.length?`\n\n${fora.length} da folha não estão cadastrados e ficam de fora.`:''}`))return;
+  S.folha=S.folha||{};
+  for(const {f,x} of ok)S.folha[f.id]={...(S.folha[f.id]||{}),q1:+x.q1||0,q2:+x.q2||0};
+  const t=k=>Math.round(ok.reduce((s,y)=>s+(+y.x[k]||0),0)*100)/100;
+  registrar(`Salários · ${MES_NOME}`,'—',`Importados da folha: ${ok.length} funcionário(s) · 1ª quinzena ${brl(t('q1'))} · 2ª quinzena ${brl(t('q2'))}`,'Importação da folha da contabilidade');
+  S.salImpRes={comp:d.comp,n:ok.length,q1:t('q1'),q2:t('q2'),fora};render();
+  toast(`Salários de ${ok.length} funcionário(s) importados. O custo por obra já usa os valores reais.`);
 }
 // ---------- Pagamentos do mês por forma (para conferir com os boletos do Alelo e do NatalCard e com o dinheiro sacado) ----------
 // só o que já foi emitido na competência: adiantamento de entrada, diárias das quinzenas, fechamento (espécie e cartões) e cestas
@@ -2500,6 +2517,8 @@ $('#view').addEventListener('click',e=>{
   if(lb){const [id,lid]=(lb.dataset.lembok||lb.dataset.lembdel).split(':'),f=byId(id),l=f?.lembretes?.find(x=>x.id===lid);if(!l)return;
     if(lb.dataset.lembok){l.feito=new Date().toLocaleDateString('pt-BR');registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Feito','Lembrete do acordo concluído');render();return toast('Lembrete concluído.')}
     f.lembretes=f.lembretes.filter(x=>x!==l);registrar(`Lembrete · ${f.nome}`,`${l.data} · ${l.txt}`,'Apagado','Lembrete do acordo');render();return toast('Lembrete apagado.')}
+  if(e.target.closest('[data-salimp]')){$('#salFile').value='';return $('#salFile').click()}
+  if(e.target.closest('[data-salimpok]')){S.salImpRes=null;return render()}
   if(e.target.closest('[data-impfolha]')){$('#impFile').value='';return $('#impFile').click()}
   if(e.target.closest('[data-impok]'))return importarFolha();
   if(e.target.closest('[data-impcancel]')){S.imp=null;S.cadSel=null;return render()}
@@ -2592,6 +2611,8 @@ $('#view').addEventListener('change',e=>{
     registrar(`Salário pago · ${byId(id).nome} · ${q==='q1'?'1ª':'2ª'} quinzena de ${MES_NOME}`,brl(antes),brl(v||0),'Valor líquido informado');
     const ins=[...document.querySelectorAll('.folha-in')],prox=ins[ins.indexOf(e.target)+1]?.dataset.folha;
     render();if(prox)document.querySelector('[data-folha="'+prox+'"]')?.focus();return toast('Valor salvo.')}
+  if(e.target.matches('[data-salfile]')&&e.target.files[0]){
+    const r=new FileReader();r.onload=()=>{try{importarSalarios(JSON.parse(r.result))}catch(er){toast('Não foi possível ler o arquivo: '+er.message)}};r.readAsText(e.target.files[0]);return}
   if(e.target.matches('[data-impfile]')&&e.target.files[0]){
     const r=new FileReader();
     r.onload=()=>{try{S.imp=prepImport(JSON.parse(r.result));S.cadSel='importar';render()}catch(er){toast('Não foi possível ler o arquivo: '+er.message)}};
