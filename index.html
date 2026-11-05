@@ -746,7 +746,7 @@ const COMP_OPC=[[2026,7],[2026,8],[2026,9],[2026,10],[2026,11]];
 const escolhaComp=()=>`<label class="ac-chk" style="font-weight:600">Competência <select id="zComp">${COMP_OPC.map(([a,m])=>`<option value="${a}-${m}" ${a===2026&&m===9?'selected':''}>${MESES_LONGO[m]}/${a}</option>`).join('')}</select></label>`;
 // ---------- Salários pagos (líquido) ----------
 function renderSalarios(){
-  const fs=visiveis().filter(f=>f.vh.some(x=>x.vinc==='mensalista')),dp=S.perfil==='dp';
+  const fs=visiveis().filter(f=>f.vh.some(x=>x.vinc==='mensalista')).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')),dp=S.perfil==='dp';
   S.folha=S.folha||{};let t1=0,t2=0;
   const emps=TODAS()?Object.keys(FUNC):[S.empresa];
   let h=`<section class="panel"><div class="panel-head"><h2>Salários pagos · ${nomeEmp()} · ${MES_NOME}</h2><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="hint">Digite o valor líquido que saiu da conta da empresa para cada mensalista, ou importe da folha da contabilidade. Os valores entram no custo por obra.</span>${dp?'<button class="btn primary" data-salimp="1">Importar da folha</button><input type="file" id="salFile" accept=".json,application/json" hidden data-salfile="1">':''}</span></div>
@@ -761,9 +761,9 @@ function renderSalarios(){
   for(const f of fs){const fo=S.folha[f.id]||{},A=acordo(f),tot=(+fo.q1||0)+(+fo.q2||0);t1+=+fo.q1||0;t2+=+fo.q2||0;
     const inp=q=>dp?`<input type="text" inputmode="decimal" class="folha-in" data-folha="${f.id}:${q}" value="${fo[q]?nfmt2(fo[q]):''}" placeholder="0,00" aria-label="${q==='q1'?'1ª':'2ª'} quinzena de ${esc(f.nome)}">`:(fo[q]?brl(fo[q]):'—');
     const cs=contasDe(empresaDe(f)),conta=dp?`<select data-contaf="${f.id}" aria-label="Conta de pagamento de ${esc(f.nome)}"><option value="">Escolher…</option>${cs.map(c=>`<option ${c===f.conta?'selected':''}>${esc(c)}</option>`).join('')}${f.conta&&!cs.includes(f.conta)?`<option selected>${esc(f.conta)}</option>`:''}</select>`:(f.conta?esc(f.conta):'—');
-    h+=`<tr><td><b>${esc(f.nome)}</b>${selo(f)}<br><span class="hint">${esc(f.funcao)}</span></td><td style="text-align:left">${conta}</td><td>${A.salario?brl(A.salario):'—'}</td><td>${inp('q1')}</td><td>${inp('q2')}</td><td><b>${tot?brl(tot):'—'}</b></td></tr>`}
+    h+=`<tr><td><b>${esc(f.nome)}</b>${selo(f)}<br><span class="hint">${esc(f.funcao)}</span></td><td style="text-align:left">${conta}</td><td>${A.salario?brl(A.salario):'—'}</td><td>${inp('q1')}</td><td>${inp('q2')}${fo.pensao?`<br><span class="hint">inclui pensão alimentícia ${brl(fo.pensao)}</span>`:''}</td><td><b>${tot?brl(tot):'—'}</b></td></tr>`}
   h+=`</tbody><tfoot><tr><td>Total</td><td></td><td></td><td>${brl(t1)}</td><td>${brl(t2)}</td><td>${brl(t1+t2)}</td></tr></tfoot></table></div>
-    <div class="legend"><span>Valor líquido = o que o funcionário recebeu (já com descontos de INSS, IR e faltas enviados à contabilidade).</span>
+    <div class="legend"><span>Valor líquido = o que o funcionário recebeu (já com descontos de INSS, IR e faltas enviados à contabilidade).</span><span>Pensão alimentícia: é descontada do funcionário, mas a empresa paga ao beneficiário; por isso entra somada ao líquido da 2ª quinzena (o que sai da conta).</span>
     <span>O custo por obra considera o que saiu da conta da empresa: aqui entra o líquido pago ao funcionário. As guias de INSS e FGTS podem ser informadas logo abaixo.</span>
     <span>Quem ficar sem valor informado aparece no custo por obra com o salário estimado pelo acordo.</span></div>
     <div style="padding:0 14px 16px"><h3 class="sub">Guias de INSS e FGTS do mês <span class="hint" style="font-family:var(--f-body);font-size:13px">(opcional)</span></h3>
@@ -871,7 +871,8 @@ function importarSalarios(d){
   if(!ok.length)return toast('Nenhum CPF do arquivo foi encontrado entre os funcionários cadastrados.');
   if(!confirm(`Importar os salários de ${compLabel(d.comp)} de ${ok.length} funcionário(s)?${ja?`\n\n${ja} já tinham valores digitados, que serão substituídos pelos da folha.`:''}${fora.length?`\n\n${fora.length} da folha não estão cadastrados e ficam de fora.`:''}`))return;
   S.folha=S.folha||{};
-  for(const {f,x} of ok)S.folha[f.id]={...(S.folha[f.id]||{}),q1:+x.q1||0,q2:+x.q2||0};
+  // a 2ª quinzena já vem com a pensão alimentícia somada (a empresa paga ao beneficiário); guarda o valor para mostrar
+  for(const {f,x} of ok)S.folha[f.id]={...(S.folha[f.id]||{}),q1:+x.q1||0,q2:+x.q2||0,pensao:+x.pensao||0};
   const t=k=>Math.round(ok.reduce((s,y)=>s+(+y.x[k]||0),0)*100)/100;
   registrar(`Salários · ${MES_NOME}`,'—',`Importados da folha: ${ok.length} funcionário(s) · 1ª quinzena ${brl(t('q1'))} · 2ª quinzena ${brl(t('q2'))}`,'Importação da folha da contabilidade');
   S.salImpRes={comp:d.comp,n:ok.length,q1:t('q1'),q2:t('q2'),fora};render();
@@ -2607,7 +2608,7 @@ $('#view').addEventListener('change',e=>{
     render();if(pk)document.querySelector(pk)?.focus();return toast('Valor salvo.')}
   if(e.target.matches('[data-folha]')){const [id,q]=e.target.dataset.folha.split(':'),v=parseBRL(e.target.value||'0');
     if(e.target.value&&!(v>=0))return toast('Valor inválido.');
-    S.folha=S.folha||{};S.folha[id]=S.folha[id]||{};const antes=S.folha[id][q]||0;S.folha[id][q]=v||0;
+    S.folha=S.folha||{};S.folha[id]=S.folha[id]||{};const antes=S.folha[id][q]||0;S.folha[id][q]=v||0;if(q==='q2')delete S.folha[id].pensao;
     registrar(`Salário pago · ${byId(id).nome} · ${q==='q1'?'1ª':'2ª'} quinzena de ${MES_NOME}`,brl(antes),brl(v||0),'Valor líquido informado');
     const ins=[...document.querySelectorAll('.folha-in')],prox=ins[ins.indexOf(e.target)+1]?.dataset.folha;
     render();if(prox)document.querySelector('[data-folha="'+prox+'"]')?.focus();return toast('Valor salvo.')}
