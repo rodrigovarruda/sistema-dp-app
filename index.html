@@ -829,11 +829,12 @@ function renderRelatorios(){
     <span class="rel-dia"><label for="relDia" class="hint">Dia</label><button class="btn" data-reldia="-1" ${dr<=1?'disabled':''} aria-label="Dia anterior">◀</button>
       <select id="relDia" aria-label="Dia do relatório">${Array.from({length:NDIAS},(_,i)=>i+1).map(d=>`<option value="${d}" ${d===dr?'selected':''}>${nd(d)}${isWE(d)||FERIADOS_AGO[d]?' ·':''}</option>`).join('')}</select>
       <button class="btn" data-reldia="1" ${dr>=NDIAS?'disabled':''} aria-label="Próximo dia">▶</button><button class="btn" data-reldia="hoje">Hoje</button>
-      <button class="btn" data-relimp="1">Imprimir</button><button class="btn primary" data-faltasabrir="1">Relatório por período</button></span></div>
-    ${S.faltasForm?`<div style="padding:12px 14px 0">${faltasFormHTML()}</div>`:''}
+      <button class="btn" data-relimp="1">Imprimir</button><button class="btn primary" data-faltasabrir="1">Relatório por período</button>${S.perfil==='dp'?'<button class="btn primary" data-pagabrir="1">Relatório de pagamentos</button>':''}</span></div>
+    ${S.faltasForm?`<div style="padding:12px 14px 0">${faltasFormHTML()}</div>`:''}${S.pagForm&&S.perfil==='dp'?`<div style="padding:12px 14px 0">${pagFormHTML()}</div>`:''}
     <div style="padding:14px">
       <div class="ac-cards">${card('Funcionários',R.base.length,'todas as empresas')}${R.agora.map(g=>card(g.l,g.fs.length,refTxt())).join('')}${card('Em aviso prévio',R.aviso.length,'até o fim do aviso')}${card('Saídas no mês',R.saidas.length,MES_NOME)}</div>
       <h3 class="sub">Funcionários por empresa</h3><div class="scroller">${T.emp}</div>
+      ${S.perfil==='dp'?`<h3 class="sub">Pagamentos emitidos em ${MES_NOME} por forma de pagamento</h3><div class="scroller">${tabelaPagEmpresas()}</div>`:''}
       <h3 class="sub">Faltas e afastados ${refTxt()}</h3><div class="scroller">${T.agora}</div>
       <h3 class="sub">Faltas e afastamentos em ${MES_NOME}</h3><div class="scroller">${T.mes}</div>
       <h3 class="sub">Aviso prévio e saídas</h3><div class="scroller">${T.saidas}</div>
@@ -846,6 +847,49 @@ function imprimirRelatorios(){
   janelaRelatorio({titulo:`Relatório de funcionários · ${MES_NOME}`,meta:`${R.base.length} funcionário(s) · situação ${refTxt()}`,logo:EMPRESAS.CONARTE?.logo,
     tabela:h('Funcionários por empresa')+T.emp+h(`Faltas e afastados ${refTxt()}`)+T.agora+h(`Faltas e afastamentos em ${MES_NOME}`)+T.mes+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
     nota:'Faltas (F) e afastados: férias (FE), perícia (PE), atestado médico (AT) e suspensão (SU) lançados no ponto ou programados.'});
+}
+// ---------- Pagamentos do mês por forma (para conferir com os boletos do Alelo e do NatalCard e com o dinheiro sacado) ----------
+// só o que já foi emitido na competência: adiantamento de entrada, diárias das quinzenas, fechamento (espécie e cartões) e cestas
+const FORMAS_PAG=[['esp','Espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard'],['cesta','Cesta básica']];
+function pagamentosDe(f){
+  const fe=S.fechF[f.id],a=calcAdiant(f),r={adi:0,dia:0,auxEsp:0,alim:0,livre:0,natal:0,cesta:0};
+  if(a&&a.total>0&&f.adiantQuando&&f.vinc==='mensalista')r.adi=a.total;
+  for(const q of [1,2])r.dia+=+(S.qf[q]?.[f.id]?.valor)||0;
+  if(fe){r.alim=+fe.alelo?.alim||0;r.livre=+fe.alelo?.livre||0;r.natal=+fe.alelo?.natal||0;
+    r.auxEsp=Math.max(0,fe.especie!=null?+fe.especie:(+fe.aux||0)-aleloSoma(fe.alelo));
+    if(fe.cesta)r.cesta+=fe.cestaValor!=null?+fe.cestaValor:valorCesta(f)}
+  if(temCestaReg(f))r.cesta+=valorCesta(f);
+  const c=v=>Math.round(v*100)/100;r.esp=c(r.adi+r.dia+r.auxEsp);r.total=c(r.esp+r.alim+r.livre+r.natal+r.cesta);return r;
+}
+const somaPag=ls=>ls.reduce((t,x)=>{for(const k in x.p)t[k]=(t[k]||0)+x.p[k];return t},{});
+function tabelaPagEmpresas(){
+  const ls=(S.perfil==='dp'?funcsEmp('TODAS'):visiveis()).map(f=>({f,p:pagamentosDe(f)})).filter(x=>x.p.total>0);
+  const emps=Object.keys(FUNC).map(e=>({e,t:somaPag(ls.filter(x=>empresaDe(x.f)===e))})).filter(x=>x.t.total>0),tot=somaPag(ls);
+  if(!ls.length)return `<p class="hint">Nenhum pagamento emitido em ${MES_NOME} ainda (fechamentos, diárias, adiantamentos ou cestas).</p>`;
+  const td=v=>`<td>${v?brl(v):'—'}</td>`;
+  return `<table class="ben"><thead><tr><th style="text-align:left">Empresa</th>${FORMAS_PAG.map(([,l])=>`<th>${l}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+    ${emps.map(x=>`<tr><td style="text-align:left"><span class="emp-chip emp-${x.e}">${x.e}</span></td>${FORMAS_PAG.map(([k])=>td(x.t[k])).join('')}<td><b>${brl(x.t.total)}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td style="text-align:left">Total</td>${FORMAS_PAG.map(([k])=>td(tot[k])).join('')}<td>${brl(tot.total||0)}</td></tr></tfoot></table>`;
+}
+function pagFormHTML(){
+  return `<form id="pagForm" class="mes-form"><b>Relatório de pagamentos · ${MES_NOME}</b>
+      <select name="esc" aria-label="Abrangência">${opcoesRel()}</select>
+      <select name="forma" aria-label="Forma de pagamento"><option value="todas">Todas as formas</option>${FORMAS_PAG.map(([k,l])=>`<option value="${k}" ${S.pagForma===k?'selected':''}>Só ${l}</option>`).join('')}</select>
+      <button class="btn primary" type="submit">Gerar relatório</button><button class="btn" type="button" data-pagfechar="1">Fechar</button></form>`;
+}
+function relatorioPagamentos(escolha,forma){
+  const {tipo,val,fs,titulo}=filtroRel(escolha),E=EMPRESAS[tipo==='emp'?val:tipo==='obra'?OBRAS[val]?.empresa:'CONARTE']||{};
+  const so=forma!=='todas',nomeF=so?FORMAS_PAG.find(x=>x[0]===forma)[1]:'';
+  const cols=so?[[forma,nomeF]]:[['adi','Adiantamento (espécie)'],['dia','Diárias (espécie)'],['auxEsp','Auxílio (espécie)'],['esp','Total espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard'],['cesta','Cesta básica'],['total','Total']];
+  const ls=fs.map(f=>({f,p:pagamentosDe(f)})).filter(x=>so?x.p[forma]>0:x.p.total>0).sort((a,b)=>empresaDe(a.f).localeCompare(empresaDe(b.f))||a.f.nome.localeCompare(b.f.nome));
+  const td=v=>`<td>${v?brl(v):'—'}</td>`,linha=x=>`<tr><td><b>${esc(x.f.nome)}</b><br><span class="sub">${x.f.cpf?esc(x.f.cpf)+' · ':''}${esc(x.f.funcao)} · ${esc(OBRAS[lotacao(x.f,NDIAS)]?.nome||'—')}</span></td>${cols.map(([k])=>td(x.p[k])).join('')}</tr>`;
+  const tot=(rot,t,cls)=>`<tr class="${cls}"><td>${rot}</td>${cols.map(([k])=>td(t[k])).join('')}</tr>`;
+  let corpo='';
+  for(const e of Object.keys(FUNC)){const g=ls.filter(x=>empresaDe(x.f)===e);if(!g.length)continue;
+    corpo+=`<tr class="grupo"><td colspan="${cols.length+1}">${e}</td></tr>`+g.map(linha).join('')+tot('Subtotal '+e,somaPag(g),'subtot')}
+  janelaRelatorio({titulo:`Relatório de pagamentos${so?' · '+nomeF:''} · ${titulo}`,meta:`Competência ${MES_NOME} · ${ls.length} funcionário(s)`,logo:E.logo,deitado:!so,
+    tabela:`<table><thead><tr><th>Funcionário</th>${cols.map(([,l])=>`<th>${l}</th>`).join('')}</tr></thead><tbody>${corpo||`<tr><td colspan="${cols.length+1}">Nenhum pagamento emitido nesta seleção.</td></tr>`}</tbody><tfoot>${tot('Total',somaPag(ls),'')}</tfoot></table>`,
+    nota:`Só valores já emitidos em ${MES_NOME}: adiantamento de entrada e diárias das quinzenas (em espécie) e o fechamento da 2ª quinzena, que paga a bonificação de ${MES_CURTO} e os benefícios de ${PROX_NOME} (em espécie e nos cartões). Cestas básicas em coluna própria. Salários (folha) não entram.`});
 }
 // Insalubridade por obra: % sobre o salário mínimo, para todas as funções menos as marcadas na obra
 const SAL_MIN=1621;
@@ -1730,6 +1774,7 @@ $('#view').addEventListener('submit',e=>{
     if(!tipos.length)return toast('Marque pelo menos um tipo de recibo.');
     S.recTipos=tipos;return recibosDoMes(fm.esc.value,tipos);
   }
+  if(fm.id==='pagForm'){S.pagForma=fm.forma.value;return relatorioPagamentos(fm.esc.value,fm.forma.value)}
   if(fm.id==='faltasForm'){
     const de=lerData(fm.de.value),ate=lerData(fm.ate.value);
     if(!de||!ate)return toast('Informe as duas datas no formato DD/MM/AAAA.');
@@ -2401,6 +2446,8 @@ $('#view').addEventListener('click',e=>{
   const va=e.target.closest('[data-veradiant]');if(va)return mostrarAdiant(byId(va.dataset.veradiant),'adiant');
   if(e.target.closest('[data-listaalelo]'))return listaAlelo();
   if(e.target.closest('[data-relimp]'))return imprimirRelatorios();
+  if(e.target.closest('[data-pagabrir]')){S.pagForm=!S.pagForm;return render()}
+  if(e.target.closest('[data-pagfechar]')){S.pagForm=false;return render()}
   const rd=e.target.closest('[data-reldia]');
   if(rd){const v=rd.dataset.reldia;S.relDia=v==='hoje'?diaHoje():Math.min(NDIAS,Math.max(1,diaRef()+(+v)));S.relDiaComp=COMP;return render()}
   const rc=e.target.closest('[data-recibos]');
