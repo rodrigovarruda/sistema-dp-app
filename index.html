@@ -894,15 +894,40 @@ function imprimirRelatorios(){
 }
 // Parte de uma quinzena paga em outra data (o valor já está na folha; muda só o dia e a conta da transferência). Não soma nada.
 const somaExtras=(fo,q)=>Math.round((fo?.extras||[]).filter(x=>!q||x.q===q).reduce((s,x)=>s+(+x.valor||0),0)*100)/100;
+// Demitido que aparece na folha com dinheiro recebido no mês: cadastra já desligado na data da demissão (obra "A DEFINIR" da empresa)
+function obraADefinir(emp){
+  const nome=`A DEFINIR (${emp})`;let id=Object.keys(OBRAS).find(k=>OBRAS[k].empresa===emp&&norm(OBRAS[k].nome)===norm(nome));
+  if(!id){id='o'+Date.now()+emp;const cod='OB-'+String(20+Object.keys(OBRAS).length).padStart(3,'0');
+    OBRAS[id]={cod,nome,empresa:emp,cidade:'—',uf:'',resp:'—',inicio:'—',fim:'—',status:'Em andamento'};S.apelidos[norm(nome)]=id;registrar(`Obra ${cod}`,'—',`Cadastrada: ${nome}`,'Importação da folha')}
+  return id;
+}
+function cadastrarDemitido(x,comp){
+  const emp=x.empresa,obra=obraADefinir(emp),cargo=(x.cargo||'').trim();
+  const nomeF=cargo?cargo.toLowerCase().replace(/^./,c=>c.toUpperCase()):'Não informada';
+  let fn=funcaoDe(nomeF)||Object.keys(DIARIAS).find(k=>norm(cargo).includes(norm(k)));
+  if(!fn){fn=nomeF;DIARIAS[fn]=0;DIARIAS_HIST[fn]=[{desde:comp,valor:0,motivo:'Função criada na importação da folha'}]}
+  const id='n'+Date.now()+'_'+soDig(x.cpf).slice(-4);
+  const f={id,nome:x.nome,cpf:fmtCpf(x.cpf),funcao:fn,vinc:'mensalista',vh:[{de:1,vinc:'mensalista'}],lot:[{de:1,obra}],diariasLancadas:0,adm:x.admissao||x.demissao,
+    contrat:{empresa:emp,obra,funcao:fn,vinc:'mensalista'},acordos:[{desde:comp,ben:{},tarifa:null,pg:{},cesta:false,salario:null,ajudaFixa:false,motivo:`Importado da folha de ${compLabel(comp)} (demitido)`,quem:'DP'}],
+    saida:{tipo:'deslig',data:x.demissao,ini:null,motivo:'Demitido (folha da contabilidade)',quando:new Date().toLocaleDateString('pt-BR'),quem:'DP'},
+    eventos:[{tipo:'saida',data:x.demissao,txt:'<b>Desligado</b>: demitido (folha da contabilidade)'}]};
+  FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};
+  registrar(`Cadastro · ${x.nome}`,'—',`Importado da folha de ${compLabel(comp)} já desligado em ${x.demissao} · ${emp} · ${fn}`,'Importação da folha · demitido');
+  return f;
+}
 // Importa os salários pagos (1ª quinzena = adiantamento, 2ª = líquido) do arquivo gerado a partir do PDF da folha; casa pelo CPF
 function importarSalarios(d){
   if(d?.tipo!=='sistemaDP.salarios'||!Array.isArray(d.itens))throw new Error('o arquivo não é de salários da folha');
   if(d.comp!==COMP)return toast(`Esta folha é de ${compLabel(d.comp)}. Troque a competência no topo para ${compLabel(d.comp)} e importe de novo.`);
   const porCpf=new Map(ALL.filter(f=>soDig(f.cpf)).map(f=>[soDig(f.cpf),f]));
-  const ok=[],fora=[];let ja=0;
-  for(const x of d.itens){const f=porCpf.get(soDig(x.cpf));if(!f){fora.push(x.nome);continue}const fo=S.folha?.[f.id];if(fo&&((+fo.q1||0)||(+fo.q2||0)))ja++;ok.push({f,x})}
-  if(!ok.length)return toast('Nenhum CPF do arquivo foi encontrado entre os funcionários cadastrados.');
-  if(!confirm(`Importar os salários de ${compLabel(d.comp)} de ${ok.length} funcionário(s)?${ja?`\n\n${ja} já tinham valores digitados, que serão substituídos pelos da folha.`:''}${fora.length?`\n\n${fora.length} da folha não estão cadastrados e ficam de fora.`:''}`))return;
+  const ok=[],fora=[],demit=[];let ja=0;
+  for(const x of d.itens){const f=porCpf.get(soDig(x.cpf));
+    // demitido no mês, não cadastrado, que recebeu algo: será cadastrado como desligado para aparecer nos salários e no custo do mês
+    if(!f){if(x.situacao==='Demitido'&&lerData(x.demissao)&&(+x.q1||0)+(+x.q2||0)>0&&FUNC[x.empresa])demit.push(x);else fora.push(x.nome);continue}
+    const fo=S.folha?.[f.id];if(fo&&((+fo.q1||0)||(+fo.q2||0)))ja++;ok.push({f,x})}
+  if(!ok.length&&!demit.length)return toast('Nenhum CPF do arquivo foi encontrado entre os funcionários cadastrados.');
+  if(!confirm(`Importar os salários de ${compLabel(d.comp)} de ${ok.length+demit.length} funcionário(s)?${ja?`\n\n${ja} já tinham valores digitados, que serão substituídos pelos da folha.`:''}${demit.length?`\n\n${demit.length} demitido(s) no mês não estão cadastrados: serão cadastrados como desligados na data da demissão (aparecem só neste mês): ${demit.map(x=>x.nome).join(', ')}.`:''}${fora.length?`\n\n${fora.length} da folha não estão cadastrados e ficam de fora.`:''}`))return;
+  for(const x of demit)ok.push({f:cadastrarDemitido(x,d.comp),x});
   S.folha=S.folha||{};
   // a 2ª quinzena já vem com a pensão alimentícia somada (a empresa paga ao beneficiário); guarda o valor para mostrar
   for(const {f,x} of ok)S.folha[f.id]={...(S.folha[f.id]||{}),q1:+x.q1||0,q2:+x.q2||0,pensao:+x.pensao||0};
