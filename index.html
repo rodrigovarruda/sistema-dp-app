@@ -796,7 +796,8 @@ function dadosRelatorios(){
   const agora=AFAST.map(([c,l])=>({c,l,fs:base.filter(f=>S.ponto[f.id]?.[dr]?.c===c)}));
   const mes=AFAST.map(([c,l])=>{let dias=0;const fs=base.filter(f=>{const n=Object.values(S.ponto[f.id]||{}).filter(r=>r.c===c).length;dias+=n;return n>0});return {c,l,n:fs.length,dias}});
   const prog=base.flatMap(f=>(f.agenda||[]).filter(a=>lerData(a.ate)>=hoje).map(a=>({f,a}))).sort((x,y)=>lerData(x.a.de)-lerData(y.a.de));
-  return {base,dr,emp,aviso,saidas,obras:Object.values(obras).sort((a,b)=>b.t-a.t||(OBRAS[a.k]?.nome||'').localeCompare(OBRAS[b.k]?.nome||'')),agora,mes,prog};
+  const avulsos=base.filter(temAvulso).sort((a,b)=>empresaDe(a).localeCompare(empresaDe(b))||a.nome.localeCompare(b.nome));
+  return {base,dr,emp,aviso,saidas,avulsos,obras:Object.values(obras).sort((a,b)=>b.t-a.t||(OBRAS[a.k]?.nome||'').localeCompare(OBRAS[b.k]?.nome||'')),agora,mes,prog};
 }
 // tabelas do relatório (as mesmas na tela e na impressão)
 function tabelasRelatorios(R){
@@ -816,6 +817,16 @@ function tabelasRelatorios(R){
   t.prog=R.prog.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Situação</th><th style="text-align:left">De</th><th style="text-align:left">Até</th><th style="text-align:left">Observação</th></tr></thead><tbody>
     ${R.prog.map(({f,a})=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${empresaDe(f)}</span></td><td style="text-align:left"><span class="code c-${a.c}" style="padding:1px 6px;border-radius:4px">${a.c}</span> ${CODES[a.c].l}</td><td style="text-align:left">${esc(a.de)}</td><td style="text-align:left">${esc(a.ate)}</td><td style="text-align:left;white-space:normal">${esc(a.obs||'')}</td></tr>`).join('')}</tbody></table>`
     :'<p class="hint">Nenhum período programado daqui para a frente.</p>';
+  // avulsos do mês: situação do período de teste e diárias por quinzena (paga = quinzena fechada; aberta = previsto)
+  const avSit=f=>f.saida?saidaTxt(f):f.vinc==='mensalista'?`Registrado como mensalista em ${admissaoTxt(f)}`:noLimite(f)?`No limite do teste (${nfmt(diasTeste(f))} dias): registrar`:`Em teste · ${nfmt(diasTeste(f))} de ${LIMITE_TESTE} dias`;
+  const avQ=(f,q)=>{const x=S.qf[q]?.[f.id],v=x||valorQ(f,q);return {n:v.n,valor:v.valor,pago:!!x,quando:x?.quando}};
+  const qTd=x=>`<td style="white-space:normal">${x.n?`${nfmt(x.n)} dia(s) · ${brl(x.valor)}<br><span class="hint sub">${x.pago?'paga em '+esc(x.quando.split(' ')[0]):'aberta (previsto)'}</span>`:'—'}</td>`;
+  const avL=R.avulsos.map(f=>({f,q1:avQ(f,1),q2:avQ(f,2)}));
+  t.avulsos=avL.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Empresa · obra</th><th style="text-align:left">Início do teste</th><th style="text-align:left">Situação</th><th>Diária</th><th>1ª quinzena</th><th>2ª quinzena</th><th>Total do mês</th></tr></thead><tbody>
+    ${avL.map(({f,q1,q2})=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${esc(f.funcao)}${f.cpf?' · '+esc(f.cpf):''}</span></td><td style="text-align:left;white-space:normal">${empresaDe(f)} · ${esc(OBRAS[lotacao(f,R.dr)]?.nome||'—')}</td>
+      <td style="text-align:left">${esc(f.adm||'—')}</td><td style="text-align:left;white-space:normal">${esc(avSit(f))}</td><td>${brl(f.diaria||DIARIAS[f.funcao]||0)}</td>${qTd(q1)}${qTd(q2)}<td><b>${brl(q1.valor+q2.valor)}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td style="text-align:left">Total</td><td></td><td></td><td></td><td></td><td>${brl(avL.reduce((s,x)=>s+x.q1.valor,0))}</td><td>${brl(avL.reduce((s,x)=>s+x.q2.valor,0))}</td><td>${brl(avL.reduce((s,x)=>s+x.q1.valor+x.q2.valor,0))}</td></tr></tfoot></table>`
+    :`<p class="hint">Nenhum avulso em ${MES_NOME}.</p>`;
   const sl=[...R.aviso.filter(f=>!R.saidas.includes(f)),...R.saidas];
   t.saidas=sl.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Situação</th><th style="text-align:left">Motivo</th><th style="text-align:left">Empresa</th></tr></thead><tbody>
     ${sl.map(f=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${esc(f.funcao)}</span></td><td style="text-align:left;white-space:normal">${esc(saidaTxt(f))}${f.saida.tipo==='aviso'&&f.saida.ini?`<br><span class="hint sub">aviso de ${esc(f.saida.ini)} a ${esc(f.saida.data)}</span>`:''}</td><td style="text-align:left;white-space:normal">${esc(f.saida.motivo)}</td><td style="text-align:left">${empresaDe(f)}</td></tr>`).join('')}</tbody></table>`
@@ -832,11 +843,12 @@ function renderRelatorios(){
       <button class="btn" data-relimp="1">Imprimir</button><button class="btn primary" data-faltasabrir="1">Relatório por período</button>${S.perfil==='dp'?'<button class="btn primary" data-pagabrir="1">Relatório de pagamentos</button>':''}</span></div>
     ${S.faltasForm?`<div style="padding:12px 14px 0">${faltasFormHTML()}</div>`:''}${S.pagForm&&S.perfil==='dp'?`<div style="padding:12px 14px 0">${pagFormHTML()}</div>`:''}
     <div style="padding:14px">
-      <div class="ac-cards">${card('Funcionários',R.base.length,'todas as empresas')}${R.agora.map(g=>card(g.l,g.fs.length,refTxt())).join('')}${card('Em aviso prévio',R.aviso.length,'até o fim do aviso')}${card('Saídas no mês',R.saidas.length,MES_NOME)}</div>
+      <div class="ac-cards">${card('Funcionários',R.base.length,'todas as empresas')}${R.agora.map(g=>card(g.l,g.fs.length,refTxt())).join('')}${card('Avulsos',R.avulsos.length,MES_NOME)}${card('Em aviso prévio',R.aviso.length,'até o fim do aviso')}${card('Saídas no mês',R.saidas.length,MES_NOME)}</div>
       <h3 class="sub">Funcionários por empresa</h3><div class="scroller">${T.emp}</div>
       ${S.perfil==='dp'?`<h3 class="sub">Pagamentos emitidos em ${MES_NOME} por forma de pagamento</h3><div class="scroller">${tabelaPagEmpresas()}</div>`:''}
       <h3 class="sub">Faltas e afastados ${refTxt()}</h3><div class="scroller">${T.agora}</div>
       <h3 class="sub">Faltas e afastamentos em ${MES_NOME}</h3><div class="scroller">${T.mes}</div>
+      <h3 class="sub">Avulsos em ${MES_NOME}</h3><div class="scroller">${T.avulsos}</div>
       <h3 class="sub">Aviso prévio e saídas</h3><div class="scroller">${T.saidas}</div>
       <h3 class="sub">Programados daqui para a frente</h3><div class="scroller">${T.prog}</div>
       <h3 class="sub">Funcionários por obra <span class="hint" style="font-weight:400">(lotação ${refTxt()})</span></h3><div class="scroller">${T.obras}</div>
@@ -845,7 +857,7 @@ function renderRelatorios(){
 function imprimirRelatorios(){
   const R=dadosRelatorios(),T=tabelasRelatorios(R),h=t=>`<h2 style="font-size:13px;text-transform:uppercase;margin:14px 0 4px">${t}</h2>`;
   janelaRelatorio({titulo:`Relatório de funcionários · ${MES_NOME}`,meta:`${R.base.length} funcionário(s) · situação ${refTxt()}`,logo:EMPRESAS.CONARTE?.logo,
-    tabela:h('Funcionários por empresa')+T.emp+h(`Faltas e afastados ${refTxt()}`)+T.agora+h(`Faltas e afastamentos em ${MES_NOME}`)+T.mes+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
+    tabela:h('Funcionários por empresa')+T.emp+h(`Faltas e afastados ${refTxt()}`)+T.agora+h(`Faltas e afastamentos em ${MES_NOME}`)+T.mes+h(`Avulsos em ${MES_NOME}`)+T.avulsos+h('Aviso prévio e saídas')+T.saidas+h('Programados daqui para a frente')+T.prog+h('Funcionários por obra')+T.obras,
     nota:'Faltas (F) e afastados: férias (FE), perícia (PE), atestado médico (AT) e suspensão (SU) lançados no ponto ou programados.'});
 }
 // ---------- Pagamentos do mês por forma (para conferir com os boletos do Alelo e do NatalCard e com o dinheiro sacado) ----------
