@@ -759,7 +759,7 @@ function renderSalarios(){
   S.folha=S.folha||{};let t1=0,t2=0;
   const emps=TODAS()?Object.keys(FUNC):[S.empresa];
   let h=`<section class="panel"><div class="panel-head"><h2>Salários pagos · ${nomeEmp()} · ${MES_NOME}</h2><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="hint">Digite o valor líquido que saiu da conta da empresa para cada mensalista, ou importe da folha da contabilidade. Os valores entram no custo por obra.</span>${dp?'<button class="btn primary" data-salimp="1">Importar da folha</button><input type="file" id="salFile" accept=".json,application/json" hidden data-salfile="1">':''}</span></div>
-    ${S.salImpRes&&S.salImpRes.comp===COMP?`<div style="padding:10px 14px 0"><div class="lemb"><span><b>Importado da folha de ${compLabel(S.salImpRes.comp)}:</b> ${S.salImpRes.n} funcionário(s) · 1ª quinzena ${brl(S.salImpRes.q1)} · 2ª quinzena ${brl(S.salImpRes.q2)}${S.salImpRes.fora.length?`<br><span class="hint">Na folha, mas não cadastrados no sistema (${S.salImpRes.fora.length}): ${S.salImpRes.fora.map(esc).join(', ')}</span>`:''}</span><button class="btn" data-salimpok="1">Ok</button></div></div>`:''}
+    ${S.salImpRes&&S.salImpRes.comp===COMP?`<div style="padding:10px 14px 0"><div class="lemb"><span><b>Importado da folha de ${compLabel(S.salImpRes.comp)}:</b> ${S.salImpRes.n} funcionário(s) · 1ª quinzena ${brl(S.salImpRes.q1)} · 2ª quinzena ${brl(S.salImpRes.q2)}${S.salImpRes.fora.length?`<br><span class="hint" style="color:var(--bad)">Na folha, mas não cadastrados no sistema (${S.salImpRes.fora.length}): ${S.salImpRes.fora.map(esc).join(', ')}. Cadastre-os (aba Funcionários → Importar da folha) e importe os salários de novo.</span>`:''}${S.salImpRes.semPag?.length?`<br><span class="hint">Demitidos sem nada a receber no mês, não precisam ser cadastrados (${S.salImpRes.semPag.length}): ${S.salImpRes.semPag.map(esc).join(', ')}</span>`:''}</span><button class="btn" data-salimpok="1">Ok</button></div></div>`:''}
     <div style="padding:0 14px 6px"><h3 class="sub">Datas de pagamento por conta</h3><p class="hint" style="margin:0 0 8px">Quem recebe pela mesma conta é pago no mesmo dia: informe a data uma vez por conta e quinzena. As contas de cada empresa ficam na aba Empresas.</p>
     <div class="scroller"><table class="ben folha"><thead><tr><th>Conta</th><th>1ª quinzena · paga em</th><th>2ª quinzena · paga em</th></tr></thead><tbody>
     ${emps.flatMap(e=>{
@@ -920,10 +920,12 @@ function importarSalarios(d){
   if(d?.tipo!=='sistemaDP.salarios'||!Array.isArray(d.itens))throw new Error('o arquivo não é de salários da folha');
   if(d.comp!==COMP)return toast(`Esta folha é de ${compLabel(d.comp)}. Troque a competência no topo para ${compLabel(d.comp)} e importe de novo.`);
   const porCpf=new Map(ALL.filter(f=>soDig(f.cpf)).map(f=>[soDig(f.cpf),f]));
-  const ok=[],fora=[],demit=[];let ja=0;
+  const ok=[],fora=[],demit=[],semPag=[];let ja=0;
   for(const x of d.itens){const f=porCpf.get(soDig(x.cpf));
     // demitido no mês, não cadastrado, que recebeu algo: será cadastrado como desligado para aparecer nos salários e no custo do mês
-    if(!f){if(x.situacao==='Demitido'&&lerData(x.demissao)&&(+x.q1||0)+(+x.q2||0)>0&&FUNC[x.empresa])demit.push(x);else fora.push(x.nome);continue}
+    if(!f){if(x.situacao==='Demitido'&&lerData(x.demissao)&&(+x.q1||0)+(+x.q2||0)>0&&FUNC[x.empresa])demit.push(x);
+      else if(x.situacao==='Demitido'&&!((+x.q1||0)+(+x.q2||0)))semPag.push(x.nome); // demitido sem nada a receber no mês: não precisa cadastrar
+      else fora.push(x.nome);continue}
     const fo=S.folha?.[f.id];if(fo&&((+fo.q1||0)||(+fo.q2||0)))ja++;ok.push({f,x})}
   if(!ok.length&&!demit.length)return toast('Nenhum CPF do arquivo foi encontrado entre os funcionários cadastrados.');
   if(!confirm(`Importar os salários de ${compLabel(d.comp)} de ${ok.length+demit.length} funcionário(s)?${ja?`\n\n${ja} já tinham valores digitados, que serão substituídos pelos da folha.`:''}${demit.length?`\n\n${demit.length} demitido(s) no mês não estão cadastrados: serão cadastrados como desligados na data da demissão (aparecem só neste mês): ${demit.map(x=>x.nome).join(', ')}.`:''}${fora.length?`\n\n${fora.length} da folha não estão cadastrados e ficam de fora.`:''}`))return;
@@ -934,7 +936,7 @@ function importarSalarios(d){
   for(const {f,x} of ok)S.folha[f.id]={...(S.folha[f.id]||{}),q1:+x.q1||0,q2:+x.q2||0,pensao:+x.pensao||0,emprestimo:+x.emprestimo||0};
   const t=k=>Math.round(ok.reduce((s,y)=>s+(+y.x[k]||0),0)*100)/100;
   registrar(`Salários · ${MES_NOME}`,'—',`Importados da folha: ${ok.length} funcionário(s) · 1ª quinzena ${brl(t('q1'))} · 2ª quinzena ${brl(t('q2'))}`,'Importação da folha da contabilidade');
-  S.salImpRes={comp:d.comp,n:ok.length,q1:t('q1'),q2:t('q2'),fora};render();
+  S.salImpRes={comp:d.comp,n:ok.length,q1:t("q1"),q2:t("q2"),fora,semPag};render();
   toast(`Salários de ${ok.length} funcionário(s) importados. O custo por obra já usa os valores reais.`);
 }
 // ---------- Pagamentos do mês por forma (para conferir com os boletos do Alelo e do NatalCard e com o dinheiro sacado) ----------
