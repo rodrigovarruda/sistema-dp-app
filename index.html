@@ -1551,15 +1551,19 @@ const opcoesObraEmp=(emp,sel)=>{const os=Object.entries(OBRAS).filter(([k,o])=>o
   const mesma=os.filter(([,o])=>o.empresa===emp),outras=os.filter(([,o])=>o.empresa!==emp);
   return os.length?mesma.map(x=>op(x)).join('')+(outras.length?`<optgroup label="Obras de outras empresas">${outras.map(x=>op(x,true)).join('')}</optgroup>`:''):`<option value="">Nenhuma obra cadastrada (aba Obras)</option>`};
 function renderCad(){
-  const dp=S.perfil==='dp',deslig=dp?funcsEmpTodos().filter(f=>!ativoNoMes(f)):[],fs=visiveis().concat(S.verDeslig?deslig:[]);
+  // "Ver desligados" mostra só quem saiu (em meses anteriores ou no mês aberto), o mais recente primeiro
+  const dp=S.perfil==='dp',dSai=f=>lerData(saidaNoMes(f)?.data||'')||0,deslig=dp?funcsEmpTodos().filter(f=>saidaNoMes(f)).sort((a,b)=>dSai(b)-dSai(a)||a.nome.localeCompare(b.nome)):[];
+  if(!deslig.length)S.verDeslig=false;
+  const fs=S.verDeslig?deslig:visiveis();
   if(S.cadSel==='importar'&&!S.imp)S.cadSel=null;
   if(!['novo','importar','lembretes'].includes(S.cadSel)&&!fs.find(f=>f.id===S.cadSel))S.cadSel=fs[0]?.id;
-  const nLemb=lembAbertos(fs).length;
+  const nLemb=lembAbertos(visiveis()).length;
   let h=`<section class="panel"><div class="panel-head"><h2>Funcionários · ${nomeEmp()}</h2><span class="hint">${dp?'O acordo de cada funcionário define o que ele recebe e quanto.':'Somente o DP cadastra funcionários e altera acordos.'}</span></div><div class="cad"><div class="cad-list">
     ${dp?`<button class="btn primary" data-cadnovo="1">+ Cadastrar funcionário</button><button class="btn" data-impfolha="1">Importar da folha</button>${nLemb?`<button class="btn" data-cad="lembretes">Lembretes (${nLemb})</button>`:''}<input type="file" id="impFile" accept=".json,application/json" hidden data-impfile="1">`:''}
-    ${deslig.length?`<button class="btn" data-verdeslig="1">${S.verDeslig?'Esconder':'Mostrar'} desligados (${deslig.length})</button>`:''}
+    ${deslig.length?`<button class="btn${S.verDeslig?' primary':''}" data-verdeslig="1">${S.verDeslig?'← Voltar para os ativos':`Ver desligados (${deslig.length})`}</button>`:''}
+    ${S.verDeslig?`<p class="hint" style="margin:0"><b>Desligados (${deslig.length})</b>: quem saiu até ${MES_NOME}, o mais recente primeiro.</p>`:''}
     <input type="search" id="cadBusca" class="cad-busca" placeholder="Buscar por nome ou CPF" aria-label="Buscar funcionário por nome ou CPF" value="${esc(S.cadBusca||'')}">
-    <div class="cad-itens" id="cadItens">${fs.map(f=>`<button class="cad-item" data-cad="${f.id}" data-busca="${esc(norm(f.nome)+' '+soDig(f.cpf))}" aria-current="${S.cadSel===f.id}" ${cadAchou(f)?'':'hidden'}><b>${esc(f.nome)}${selo(f)}</b><span class="hint">${esc(f.funcao)} · ${vincCurto(f)}</span>${f.saida?`<span class="tag">${esc(saidaTxt(f))}</span>`:''}</button>`).join('')}
+    <div class="cad-itens" id="cadItens">${fs.map(f=>`<button class="cad-item" data-cad="${f.id}" data-busca="${esc(norm(f.nome)+' '+soDig(f.cpf))}" aria-current="${S.cadSel===f.id}" ${cadAchou(f)?'':'hidden'}><b>${esc(f.nome)}${selo(f)}</b><span class="hint">${esc(f.funcao)} · ${vincCurto(f)}</span>${f.saida?`<span class="tag">${esc(saidaTxt(f))}</span>`:S.verDeslig&&saidaNoMes(f)?`<span class="tag">Saiu em ${esc(saidaNoMes(f).data)}</span>`:''}</button>`).join('')}
     <p class="hint" id="cadNada" ${fs.some(cadAchou)?'hidden':''}>Ninguém encontrado.</p></div></div><div class="cad-main">`;
   if(S.cadSel==='novo'){
     h+=`<form id="novoForm" class="cad-form"><h3 class="sub" style="margin-top:0">Novo funcionário</h3>
@@ -1925,7 +1929,7 @@ $('#view').addEventListener('submit',e=>{
     delete f.avulsoPrazo;
     if(prazo)aplicarPrazo(f,prazo);
     registrar(`Readmissão · ${f.nome}`,`Desligado em ${f.saidasAnteriores.slice(-1)[0].data}`,`Readmitido em ${adm} na ${emp} · ${vinc==='avulso'?'avulso':'mensalista'} · ${funcao} · ${OBRAS[obra]?.nome||''}`,motivo||'Readmissão');
-    S.readmEdit=null;S.cadSel=f.id;if(!TODAS()&&S.empresa!==emp){S.empresa=emp;$('#selEmp').value=emp}
+    S.readmEdit=null;S.verDeslig=false;S.cadSel=f.id;if(!TODAS()&&S.empresa!==emp){S.empresa=emp;$('#selEmp').value=emp}
     render();return toast(`${f.nome} readmitido em ${adm} como ${vinc==='avulso'?'avulso':'mensalista'}.${vinc==='mensalista'?' Confira o acordo na ficha.':''}`);
   }
   if(fm.id==='prazoForm'){
@@ -2661,7 +2665,7 @@ $('#view').addEventListener('click',e=>{
   const sc=e.target.closest('[data-saidacancel]');
   if(sc){const f=byId(sc.dataset.saidacancel);if(!f?.saida)return;if(!confirm(`Cancelar "${saidaTxt(f)}" de ${f.nome}?\n\nUse só se foi lançado por engano ou se a saída foi desfeita.`))return;
     registrar(`Saída · ${f.nome}`,`${saidaTxt(f)} · ${f.saida.motivo}`,'Cancelada','Saída cancelada pelo DP');
-    f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='saida'&&!l.feito));f.eventos=(f.eventos||[]).filter(ev=>ev.tipo!=='saida');delete f.saida;render();return toast('Saída cancelada. O funcionário volta a ficar ativo.')}
+    f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='saida'&&!l.feito));f.eventos=(f.eventos||[]).filter(ev=>ev.tipo!=='saida');delete f.saida;S.verDeslig=false;S.cadSel=f.id;render();return toast('Saída cancelada. O funcionário volta a ficar ativo.')}
   const vd=e.target.closest('[data-verdeslig]');if(vd){S.verDeslig=!S.verDeslig;return render()}
   const oe=e.target.closest('[data-outraemp]');
   if(oe){const f=byId(oe.dataset.outraemp);S.empresa=empresaDe(f);$('#selEmp').value=S.empresa;S.cadSel=f.id;S.cadEdit=false;render();return toast(`${f.nome} está na ${S.empresa}.`)}
