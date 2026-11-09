@@ -526,7 +526,8 @@ function diasTeste(f){
   for(const [k,t] of Object.entries(S.comps||{}))if(k!==COMP&&t.emp?.[f.id])conta(t.ponto?.[f.id],t.emp[f.id].vh);
   return n;
 }
-const emTeste=f=>f.vinc==='avulso'&&!f.vh.some(x=>x.vinc==='mensalista');
+// avulso por prazo (f.avulsoPrazo={ate}) trabalha como avulso sem período de teste: não entra no limite de dias
+const emTeste=f=>f.vinc==='avulso'&&!f.avulsoPrazo&&!f.vh.some(x=>x.vinc==='mensalista');
 const noLimite=f=>emTeste(f)&&diasTeste(f)>=LIMITE_TESTE;
 ALL.find(f=>f.id==='c9').adiantQuando='07/08/2026 08:30';ALL.find(f=>f.id==='c9').admissao='07/08/2026';
 {const ADM={c9:'03/08/2026',c1:'15/03/2024',c2:'02/09/2024',c3:'10/01/2025',c4:'03/06/2023',c5:'20/05/2025',c6:'08/11/2024',c7:'03/08/2026',c8:'12/02/2022',e1:'05/04/2025',e2:'14/07/2025',e3:'01/10/2025',i1:'18/08/2024',i2:'09/03/2026'};
@@ -537,7 +538,7 @@ const vincDia=(f,d)=>{let v=f.vh[0].vinc;for(const x of f.vh)if(x.de<=d)v=x.vinc
 const temAvulso=f=>f.vh.some(x=>x.vinc==='avulso');
 const VL={avulso:'Avulso',mensalista:'Mensalista'};
 const vincCurto=f=>f.vh.length>1?f.vh.map(x=>VL[x.vinc]).join(' → '):VL[f.vinc];
-const vincLongo=f=>f.vh.length>1?f.vh.map((x,i)=>`${VL[x.vinc]} ${i?'desde '+dd(x.de):'até '+dd(f.vh[i+1].de-1)}`).join(' → '):VL[f.vinc];
+const vincLongo=f=>f.vinc==='avulso'&&f.avulsoPrazo&&f.vh.length<=1?`Avulso por prazo até ${f.avulsoPrazo.ate}`:f.vh.length>1?f.vh.map((x,i)=>`${VL[x.vinc]} ${i?'desde '+dd(x.de):'até '+dd(f.vh[i+1].de-1)}`).join(' → '):VL[f.vinc];
 function historico(f){
   const ev0=(f.eventos||[]).map(e=>({...e}));
   const ev=[{data:f.adm,txt:`${f.contrat.vinc==='avulso'?'Início do período de teste na':'Admitido na'} <b>${esc(f.contrat.empresa)}</b> como ${esc(f.contrat.funcao)} (${f.contrat.vinc==='avulso'?'avulso':'mensalista'}), contratado para a obra <b>${esc(OBRAS[f.contrat.obra].nome)}</b>`}];
@@ -855,7 +856,7 @@ function tabelasRelatorios(R){
     ${R.prog.map(({f,a})=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${empresaDe(f)}</span></td><td style="text-align:left"><span class="code c-${a.c}" style="padding:1px 6px;border-radius:4px">${a.c}</span> ${CODES[a.c].l}</td><td style="text-align:left">${esc(a.de)}</td><td style="text-align:left">${esc(a.ate)}</td><td style="text-align:left;white-space:normal">${esc(a.obs||'')}</td></tr>`).join('')}</tbody></table>`
     :'<p class="hint">Nenhum período programado daqui para a frente.</p>';
   // avulsos do mês: situação do período de teste e diárias por quinzena (paga = quinzena fechada; aberta = previsto)
-  const avSit=f=>f.saida?saidaTxt(f):f.vinc==='mensalista'?`Registrado como mensalista em ${admissaoTxt(f)}`:noLimite(f)?`No limite do teste (${nfmt(diasTeste(f))} dias): registrar`:`Em teste · ${nfmt(diasTeste(f))} de ${LIMITE_TESTE} dias`;
+  const avSit=f=>f.saida?saidaTxt(f):f.vinc==='avulso'&&f.avulsoPrazo?`Avulso por prazo até ${f.avulsoPrazo.ate} (sem período de teste)`:f.vinc==='mensalista'?`Registrado como mensalista em ${admissaoTxt(f)}`:noLimite(f)?`No limite do teste (${nfmt(diasTeste(f))} dias): registrar`:`Em teste · ${nfmt(diasTeste(f))} de ${LIMITE_TESTE} dias`;
   const avQ=(f,q)=>{const x=S.qf[q]?.[f.id],v=x||valorQ(f,q);return {n:v.n,valor:v.valor,pago:!!x,quando:x?.quando}};
   const qTd=x=>`<td style="white-space:normal">${x.n?`${nfmt(x.n)} dia(s) · ${brl(x.valor)}<br><span class="hint sub">${x.pago?'paga em '+esc(x.quando.split(' ')[0]):'aberta (previsto)'}</span>`:'—'}</td>`;
   const avL=R.avulsos.map(f=>({f,q1:avQ(f,1),q2:avQ(f,2)}));
@@ -1574,7 +1575,8 @@ function renderCad(){
       <p class="hint" style="margin:0">A empresa e a obra de contratação ficam guardadas no histórico do funcionário. Depois, a obra do dia a dia pode mudar livremente no ponto.</p>
       <div id="acBloco"><h3 class="sub">Acordo: o que ele tem direito e quanto</h3><p class="hint" style="margin:0 0 6px">Marque só as verbas combinadas com o funcionário e informe o valor acordado.</p>
       ${acordoInputs(null)}</div>
-      <p class="hint" id="testeBox" hidden style="margin:0">Avulso entra em período de teste: no máximo ${LIMITE_TESTE} dias trabalhados antes do registro.</p>
+      <p class="hint" id="testeBox" hidden style="margin:0">Avulso entra em período de teste: no máximo ${LIMITE_TESTE} dias trabalhados antes do registro (a não ser que seja avulso por prazo).</p>
+      <div id="nPrazoWrap" hidden>${prazoCampo('nPrazoBox',`01/${MM}/${ANO}`)}</div>
       <p class="hint" id="acAvulso" hidden>Avulso recebe só a diária da função, que já inclui passagem e alimentação.</p><div id="formErr" class="err"></div>
       <div class="actions"><button class="btn primary" type="submit">Cadastrar</button><button class="btn" type="button" data-cad="${fs[0]?.id||''}">Cancelar</button></div></form>`;
   } else if(S.cadSel==='importar'){
@@ -1609,6 +1611,9 @@ function renderCad(){
   return `<div class="${lim?'teste-alerta':'teste-info'}"><b>${lim?(n>LIMITE_TESTE?'⚠ Limite do período de teste ultrapassado':'⚠ Limite do período de teste atingido'):'Período de teste'}: ${nfmt(n)} de ${LIMITE_TESTE} dias trabalhados.</b>
     <span>${lim?`${esc(f.nome)} deve ser registrado antes de continuar trabalhando.`:`Faltam ${nfmt(LIMITE_TESTE-n)} dia(s). Depois disso, registre o funcionário como mensalista.`}</span>
     ${lim&&S.perfil==='dp'?`<button class="btn primary" data-govinc="${f.id}">Registrar como mensalista</button>`:''}</div>`})()}
+       ${f.vinc==='avulso'&&!f.saida&&(dp||f.avulsoPrazo)?`<div class="teste-info" id="prazoFicha">${f.avulsoPrazo?`<b>Avulso por prazo até ${esc(f.avulsoPrazo.ate)}</b><span>Sem período de teste: não entra no limite de ${LIMITE_TESTE} dias. No fim do prazo, registre como mensalista ou dispense.</span>`:`<span>Se ele vai ficar como avulso por um tempo combinado (ex.: 6 meses), sem período de teste, marque aqui.</span>`}
+         ${dp&&S.prazoEdit!==f.id?`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-prazoedit="${f.id}">${f.avulsoPrazo?'Mudar o prazo':'Avulso por prazo'}</button>${f.avulsoPrazo?`<button class="btn" data-prazotirar="${f.id}">Tirar o prazo (volta ao período de teste)</button>`:''}</span>`:''}
+         ${dp&&S.prazoEdit===f.id?`<form id="prazoForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="pAte">Avulso por prazo, sem período de teste, até:</label><input type="text" id="pAte" name="ate" data-date="1" inputmode="numeric" value="${esc(f.avulsoPrazo?.ate||maisMeses(f.adm,6))}" placeholder="DD/MM/AAAA"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar prazo</button><button class="btn" type="button" data-prazoedit="">Cancelar</button></div></form>`:''}</div>`:''}
        ${recibosFicha(f)}
        ${f.vinc==='avulso'?`<h3 class="sub">Pagamento do avulso</h3>
        <div class="ac-cards"><div class="ac-card"><span class="hint">Diária de ${esc(f.funcao)}</span><b class="num">${brl(f.diaria||DIARIAS[f.funcao])}</b><span class="hint">por dia de serviço</span></div>
@@ -1680,6 +1685,16 @@ function abrirBusca(forcar){
   const n=$('#cadBusca');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}
 }
 // Ficha: situação de saída (aviso prévio, desligamento, dispensa) ou o formulário para encerrar o vínculo
+// Avulso por prazo: trabalha como avulso por um tempo combinado (ex.: 6 meses), sem período de teste; lembrete no fim do prazo
+const maisMeses=(data,n)=>{const d=lerData(data)||new Date();const r=new Date(d.getFullYear(),d.getMonth()+n,d.getDate());return fmtData(r)};
+function aplicarPrazo(f,ate){
+  const antes=f.avulsoPrazo?.ate;f.avulsoPrazo={ate,quando:new Date().toLocaleDateString('pt-BR')};
+  f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='prazo'&&!l.feito));
+  f.lembretes.push({id:'l'+Date.now(),auto:'prazo',data:ate,txt:'Fim do prazo como avulso: registrar como mensalista ou dispensar',criado:new Date().toLocaleDateString('pt-BR'),quem:'DP',feito:null});
+  registrar(`Avulso por prazo · ${f.nome}`,antes?`até ${antes}`:'Período de teste',`Avulso por prazo até ${ate} (sem período de teste)`,'Avulso por prazo');
+}
+// campo do cadastro e da readmissão: "avulso por prazo" (aparece quando o vínculo é avulso)
+const prazoCampo=(id,adm)=>`<div class="field prazo-box" id="${id}"><label class="ac-chk" style="font-weight:500"><input type="checkbox" name="prazoChk"> Avulso por prazo, sem período de teste, até:</label><input type="text" name="prazoAte" data-date="1" inputmode="numeric" value="${maisMeses(adm,6)}" placeholder="DD/MM/AAAA"></div>`;
 // Readmissão de quem já saiu (ex.: recontratado como avulso): a saída anterior vai para o histórico e ele volta às listas
 function readmHTML(f){
   const emp=empresaDe(f),hoje=new Date().toLocaleDateString('pt-BR');
@@ -1691,6 +1706,7 @@ function readmHTML(f){
       <div class="field"><label for="rFunc">Função</label><select id="rFunc" name="funcao">${Object.keys(DIARIAS).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>`<option ${n===f.funcao?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
       <div class="field"><label for="rVinc">Vínculo</label><select id="rVinc" name="vinc"><option value="avulso">Avulso (período de teste)</option><option value="mensalista">Mensalista</option></select></div>
       <div class="field"><label for="rAdm">Data de início</label><input type="text" id="rAdm" name="adm" data-date="1" inputmode="numeric" value="${hoje}" placeholder="DD/MM/AAAA"></div>
+      ${prazoCampo('rPrazoBox',hoje)}
       <div class="field"><label for="rMot">Motivo (opcional)</label><input type="text" id="rMot" name="motivo" placeholder="Ex.: recontratado para a obra X"></div></div>
     <div id="formErr" class="err"></div>
     <div class="actions"><button class="btn primary" type="submit">Readmitir</button><button class="btn" type="button" data-readm="">Cancelar</button></div></form>`;
@@ -1894,19 +1910,31 @@ $('#view').addEventListener('submit',e=>{
     if(ds&&d<=ds)return err(`A data de início precisa ser depois da saída (${f.saida.data}).`);
     if(d.getFullYear()*12+d.getMonth()!==ANO*12+MES)return err(`A data de início precisa ser em ${MES_NOME} (a competência aberta no topo).`);
     if(!obra)return err(`Nenhuma obra cadastrada para ${emp}. Cadastre a obra na aba Obras.`);
+    const prazo=vinc==='avulso'&&fm.prazoChk.checked?fm.prazoAte.value.trim():'';
+    if(prazo&&!(lerData(prazo)>d))return err('Informe até quando ele fica como avulso (DD/MM/AAAA), depois da data de início.');
     const antes=empresaDe(f);
     if(emp!==antes){FUNC[antes]=FUNC[antes].filter(x=>x!==f);FUNC[emp].push(f)}
     (f.saidasAnteriores=f.saidasAnteriores||[]).push({...f.saida,readmitidoEm:adm,admAnterior:f.adm});
-    (f.eventos=f.eventos||[]).push({tipo:'readm',data:adm,txt:`<b>Readmitido</b> na ${esc(emp)} como ${vinc==='avulso'?'avulso (período de teste)':'mensalista'}${motivo?': '+esc(motivo):''}`});
+    (f.eventos=f.eventos||[]).push({tipo:'readm',data:adm,txt:`<b>Readmitido</b> na ${esc(emp)} como ${vinc==='avulso'?(prazo?'avulso por prazo até '+esc(prazo):'avulso (período de teste)'):'mensalista'}${motivo?': '+esc(motivo):''}`});
     delete f.saida;
     Object.assign(f,{adm,vinc,funcao,vh:[{de:1,vinc}],lot:[{de:1,obra}],contrat:{empresa:emp,obra,funcao,vinc},diariasLancadas:0,adiantQuando:null,cestaReg:null});
     if(vinc==='avulso')f.diaria=DIARIAS[funcao];else delete f.diaria;
     if(vinc==='mensalista'){const a=acordo(f);f.acordos=f.acordos.filter(x=>x.desde!==COMP);f.acordos.push({desde:COMP,ben:{},tarifa:null,pg:{},cesta:false,salario:a?.salario||null,ajudaFixa:false,motivo:'Readmissão',quem:'DP'});f.acordos.sort((x,y)=>x.desde.localeCompare(y.desde))}
     f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='saida'&&!l.feito));
     S.ponto[f.id]=S.ponto[f.id]||{};
+    delete f.avulsoPrazo;
+    if(prazo)aplicarPrazo(f,prazo);
     registrar(`Readmissão · ${f.nome}`,`Desligado em ${f.saidasAnteriores.slice(-1)[0].data}`,`Readmitido em ${adm} na ${emp} · ${vinc==='avulso'?'avulso':'mensalista'} · ${funcao} · ${OBRAS[obra]?.nome||''}`,motivo||'Readmissão');
     S.readmEdit=null;S.cadSel=f.id;if(!TODAS()&&S.empresa!==emp){S.empresa=emp;$('#selEmp').value=emp}
     render();return toast(`${f.nome} readmitido em ${adm} como ${vinc==='avulso'?'avulso':'mensalista'}.${vinc==='mensalista'?' Confira o acordo na ficha.':''}`);
+  }
+  if(fm.id==='prazoForm'){
+    const f=byId(S.cadSel),ate=fm.ate.value.trim(),d=lerData(ate);
+    if(!f||f.vinc!=='avulso')return;
+    if(!d)return err('Informe a data no formato DD/MM/AAAA.');
+    if(lerData(f.adm)&&d<=lerData(f.adm))return err(`A data precisa ser depois do início (${f.adm}).`);
+    aplicarPrazo(f,ate);S.prazoEdit=null;
+    render();return toast(`${f.nome}: avulso por prazo até ${ate}, sem período de teste. Lembrete criado para ${ate}.`);
   }
   if(fm.id==='extraForm'){
     const f=byId(fm.dataset.f),v=parseBRL(fm.valor.value),data=fm.data.value.trim(),motivo=fm.motivo.value.trim().replace(/\s+/g,' ');
@@ -2071,6 +2099,7 @@ $('#view').addEventListener('submit',e=>{
     if(motivo.length<4)return err('Escreva o motivo da mudança.');
     let ac=null;if(novo==='mensalista'){ac=lerAcordo(fm);if(ac.erro)return err(ac.erro)}
     f.vh.push({de,vinc:novo});f.vinc=novo;if(novo==='mensalista')f.admissao=dd(de)+'/'+ANO;
+    if(novo==='mensalista')delete f.avulsoPrazo;
     if(novo==='mensalista'){f.acordos=f.acordos.filter(a=>a.desde!==COMP);f.acordos.push({desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,peric:ac.peric||null,insal:ac.insal||null,insalBase:ac.insalBase||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo do registro',quem:'DP'});f.acordos.sort((a,b)=>a.desde.localeCompare(b.desde))}
     else{f.diaria=f.diaria||DIARIAS[f.funcao];f.diariasLancadas=f.diariasLancadas||0}
     registrar(`Vínculo · ${f.nome}`,VL[novo==='mensalista'?'avulso':'mensalista'],`${VL[novo]} a partir de ${dd(de)}/${ANO}`,motivo);
@@ -2094,11 +2123,13 @@ $('#view').addEventListener('submit',e=>{
       // diz de quem é o CPF; se a pessoa já saiu, oferece abrir a ficha para readmitir
       if(ja){fm.querySelector('#formErr').innerHTML=`Esse CPF já é de <b>${esc(ja.nome)}</b> (${empresaDe(ja)}${ja.saida?`, ${esc(saidaTxt(ja).toLowerCase())}`:''}). ${ja.saida?'Para recontratar, abra a ficha e use "Readmitir".':'Não é preciso cadastrar de novo.'} <button class="btn" type="button" data-abrirfunc="${ja.id}">Abrir a ficha</button>`;return}}
     const adm=fm.adm.value.trim();if(!/^\d{2}\/\d{2}\/\d{4}$/.test(adm))return err('Informe a data de admissão no formato DD/MM/AAAA.');
+    const prazoN=fm.vinc.value==='avulso'&&fm.prazoChk&&fm.prazoChk.checked?fm.prazoAte.value.trim():'';
+    if(fm.vinc.value==='avulso'&&fm.prazoChk&&fm.prazoChk.checked&&!(lerData(prazoN)>lerData(adm)))return err('Informe até quando ele fica como avulso por prazo (DD/MM/AAAA, depois da admissão).');
     const id='n'+Date.now(),funcao=fm.funcao.value,vinc=fm.vinc.value,emp=fm.empresa.value;
     const f={id,nome,cpf:fmtCpf(fm.cpf.value),funcao,vinc,vh:[{de:1,vinc}],lot:[{de:1,obra:fm.obra.value}],diaria:vinc==='avulso'?DIARIAS[funcao]:undefined,diariasLancadas:0,
       adm,contrat:{empresa:emp,obra:fm.obra.value,funcao,vinc},
       acordos:[{desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,peric:ac.peric||null,insal:ac.insal||null,insalBase:ac.insalBase||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo da admissão',quem:'DP'}]};
-    FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};S.cadSel=id;
+    FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};S.cadSel=id;if(prazoN)aplicarPrazo(f,prazoN);
     if(emp!==S.empresa&&!TODAS()){S.empresa=emp;$('#selEmp').value=emp}
     registrar(`Cadastro · ${nome}`,'—',`Admitido na ${emp} em ${adm} para ${OBRAS[fm.obra.value].nome} · `+(vinc==='avulso'?'avulso':resumoTxt(f.acordos[0])),'Admissão');
     // admitido direto como mensalista neste mês: entrega na entrada o auxílio dos dias restantes e a cesta do mês
@@ -2617,6 +2648,12 @@ $('#view').addEventListener('click',e=>{
   const af=e.target.closest('[data-abrirfunc]');
   if(af){const f=byId(af.dataset.abrirfunc);if(!f)return;if(!ativoNoMes(f))S.verDeslig=true;if(!TODAS()&&S.empresa!==empresaDe(f)){S.empresa=empresaDe(f);$('#selEmp').value=S.empresa}
     S.cadSel=f.id;S.cadEdit=false;render();$('.cad-main')?.scrollIntoView({block:'start'});return}
+  const pz=e.target.closest('[data-prazoedit]');
+  if(pz){S.prazoEdit=pz.dataset.prazoedit||null;render();if(S.prazoEdit)$('#prazoForm')?.scrollIntoView({block:'center'});return}
+  const pt=e.target.closest('[data-prazotirar]');
+  if(pt){const f=byId(pt.dataset.prazotirar);if(!f||!f.avulsoPrazo)return;if(!confirm(`Tirar o prazo de ${f.nome}? Ele volta ao período de teste (limite de ${LIMITE_TESTE} dias).`))return;
+    const antes=f.avulsoPrazo.ate;delete f.avulsoPrazo;f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='prazo'&&!l.feito));
+    registrar(`Avulso por prazo · ${f.nome}`,`até ${antes}`,'Período de teste','Prazo retirado');render();return toast(`${f.nome} voltou ao período de teste.`)}
   const rm=e.target.closest('[data-readm]');
   if(rm){S.readmEdit=rm.dataset.readm||null;render();if(S.readmEdit)$('#readmForm')?.scrollIntoView({block:'center'});return}
   const se=e.target.closest('[data-saidaedit]');
@@ -2759,7 +2796,8 @@ $('#view').addEventListener('change',e=>{
       c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
       EMPRESAS[k].logo=c.toDataURL('image/png');registrar(`Empresa · ${k}`,'—','Logomarca atualizada','Dados da empresa');render();toast('Logomarca salva.')};img.src=r.result};
     r.readAsDataURL(file);return}
-  if(e.target.id==='nVinc'){const av=e.target.value==='avulso';$('#testeBox').hidden=!av;$('#nAdmLbl').textContent=av?'Início do período de teste':'Data de admissão';$('#acBloco').hidden=av;$('#acAvulso').hidden=!av;return}
+  if(e.target.id==='rVinc'){$('#rPrazoBox').hidden=e.target.value!=='avulso';return}
+  if(e.target.id==='nVinc'){const av=e.target.value==='avulso';$('#testeBox').hidden=!av;$('#nPrazoWrap').hidden=!av;$('#nAdmLbl').textContent=av?'Início do período de teste':'Data de admissão';$('#acBloco').hidden=av;$('#acAvulso').hidden=!av;return}
   const s=e.target.closest('[data-vinc]');
   if(s&&s.value){S.apelidos[s.dataset.vinc]=s.value;render();toast('Nome vinculado a '+OBRAS[s.value].nome+'.')}
 });
