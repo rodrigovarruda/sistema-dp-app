@@ -581,9 +581,12 @@ const TODAS=()=>S.empresa==='TODAS';
 // Saída do funcionário (f.saida): dispensa no período de teste, aviso prévio trabalhado ou desligamento.
 // data = último dia de trabalho. No mês da saída ele continua nas listas; nos meses seguintes, não.
 const saidaData=f=>f.saida?lerData(f.saida.data):null;
-const ativoNoMes=f=>{const d=saidaData(f);return !d||d.getFullYear()*12+d.getMonth()>=ANO*12+MES};
+// readmitido: as saídas anteriores ficam em f.saidasAnteriores (com readmitidoEm e admAnterior); cada mês usa o período certo
+const mesK=d=>d.getFullYear()*12+d.getMonth();
+const saidaNoMes=f=>{const k=ANO*12+MES;for(const s of [...(f.saidasAnteriores||[]),...(f.saida?[f.saida]:[])]){const d=lerData(s.data);if(!d)continue;const rd=s.readmitidoEm?lerData(s.readmitidoEm):null;if(k>=mesK(d)&&(!rd||k<mesK(rd)))return s}return null};
+const ativoNoMes=f=>{const s=saidaNoMes(f);return !s||mesK(lerData(s.data))===ANO*12+MES};
 // dia da saída dentro do mês aberto (ou null se a saída não é neste mês)
-const saidaDia=f=>{const d=saidaData(f);return d&&d.getFullYear()===ANO&&d.getMonth()===MES?d.getDate():null};
+const saidaDia=f=>{const s=saidaNoMes(f),d=s&&lerData(s.data);return d&&d.getFullYear()===ANO&&d.getMonth()===MES?d.getDate():null};
 const saidaTxt=f=>{if(!f.saida)return '';const d=saidaData(f),h=new Date();h.setHours(0,0,0,0);
   if(f.saida.tipo==='dispensa')return `Dispensado em ${f.saida.data} (não aprovado no teste)`;
   if(f.saida.tipo==='aviso'&&d>=h)return `Em aviso prévio até ${f.saida.data}`;
@@ -611,7 +614,9 @@ function pendencias(emp=S.empresa){
   for(const f of funcsEmp(emp))out.push(...pendF(f));
   return out;
 }
-const admDia=f=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f.adm||'');if(!m)return 1;const k=+m[3]*12+(+m[2]-1),c=ANO*12+MES;return k<c?1:k>c?99:+m[1]};
+// admissão que vale para o mês aberto (antes de uma readmissão, vale a admissão anterior)
+const admDe=f=>{const k=ANO*12+MES;for(const s of f.saidasAnteriores||[]){const rd=lerData(s.readmitidoEm||'');if(rd&&k<mesK(rd)&&s.admAnterior)return s.admAnterior}return f.adm};
+const admDia=f=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(admDe(f)||'');if(!m)return 1;const k=+m[3]*12+(+m[2]-1),c=ANO*12+MES;return k<c?1:k>c?99:+m[1]};
 const exigeDia=(f,d)=>obrig(d)&&d>=admDia(f)&&vincDia(f,d)!=='avulso'&&!(saidaDia(f)&&d>saidaDia(f));
 // Férias, perícia e suspensão programadas: período de datas (pode passar de um mês para o outro).
 // Preenche os dias vazios do mês aberto (dias corridos, com fins de semana e feriados); o restante entra quando o mês seguinte for aberto.
@@ -820,7 +825,7 @@ function periodoAfast(f,c,d){
 function dadosRelatorios(){
   const dr=diaRef(),hoje=new Date();hoje.setHours(0,0,0,0),ref=new Date(ANO,MES,dr);
   // ativos no dia de referência: quem já saiu antes dele não conta
-  const todos=S.perfil==='dp'?ALL:funcsEmpTodos().filter(f=>f.lot.some(l=>l.obra==='ipe')),base=todos.filter(f=>!saidaData(f)||saidaData(f)>=ref);
+  const todos=S.perfil==='dp'?ALL:funcsEmpTodos().filter(f=>f.lot.some(l=>l.obra==='ipe')),base=todos.filter(f=>{const sn=saidaNoMes(f);return !sn||lerData(sn.data)>=ref});
   const aviso=base.filter(f=>f.saida?.tipo==='aviso'&&saidaData(f)>=hoje);
   const saidas=todos.filter(f=>saidaDia(f)).sort((a,b)=>saidaData(a)-saidaData(b));
   const emp=Object.keys(FUNC).map(e=>{const fs=base.filter(f=>empresaDe(f)===e);return {e,m:fs.filter(f=>f.vinc==='mensalista').length,a:fs.filter(f=>f.vinc!=='mensalista').length,t:fs.length}}).filter(x=>x.t);
@@ -1675,10 +1680,25 @@ function abrirBusca(forcar){
   const n=$('#cadBusca');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}
 }
 // Ficha: situação de saída (aviso prévio, desligamento, dispensa) ou o formulário para encerrar o vínculo
+// Readmissão de quem já saiu (ex.: recontratado como avulso): a saída anterior vai para o histórico e ele volta às listas
+function readmHTML(f){
+  const emp=empresaDe(f),hoje=new Date().toLocaleDateString('pt-BR');
+  return `<form id="readmForm" class="cad-form" data-f="${f.id}"><h3 class="sub" style="margin-top:0">Readmitir ${esc(f.nome)}</h3>
+    <p class="hint" style="margin:0">A saída anterior (${esc(f.saida.data)}) fica no histórico. Os acordos e o ponto dos meses anteriores não mudam.</p>
+    <div class="form-grid">
+      <div class="field"><label for="rEmp">Empresa</label><select id="rEmp" name="empresa">${Object.keys(FUNC).map(e=>`<option ${e===emp?'selected':''}>${e}</option>`).join('')}</select></div>
+      <div class="field"><label for="rObra">Obra de contratação</label><select id="rObra" name="obra">${opcoesObraEmp(emp)}</select></div>
+      <div class="field"><label for="rFunc">Função</label><select id="rFunc" name="funcao">${Object.keys(DIARIAS).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>`<option ${n===f.funcao?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
+      <div class="field"><label for="rVinc">Vínculo</label><select id="rVinc" name="vinc"><option value="avulso">Avulso (período de teste)</option><option value="mensalista">Mensalista</option></select></div>
+      <div class="field"><label for="rAdm">Data de início</label><input type="text" id="rAdm" name="adm" data-date="1" inputmode="numeric" value="${hoje}" placeholder="DD/MM/AAAA"></div>
+      <div class="field"><label for="rMot">Motivo (opcional)</label><input type="text" id="rMot" name="motivo" placeholder="Ex.: recontratado para a obra X"></div></div>
+    <div id="formErr" class="err"></div>
+    <div class="actions"><button class="btn primary" type="submit">Readmitir</button><button class="btn" type="button" data-readm="">Cancelar</button></div></form>`;
+}
 function saidaHTML(f){
   const dp=S.perfil==='dp',s=f.saida;
   if(s)return `<div class="lemb perto" style="margin:8px 0"><span><b>${esc(saidaTxt(f))}</b>${s.tipo==='aviso'&&s.ini?` · aviso de ${esc(s.ini)} a ${esc(s.data)}`:''}<br><span class="hint">${esc(s.motivo)} · registrado em ${esc(s.quando)}. No último fechamento sai só a bonificação do mês, sem os benefícios e a cesta do mês seguinte.</span></span>
-    ${dp?`<button class="btn" data-saidacancel="${f.id}">Cancelar</button>`:''}</div>`;
+    ${dp?`<span style="display:flex;gap:6px">${S.readmEdit!==f.id?`<button class="btn primary" data-readm="${f.id}">Readmitir</button>`:''}<button class="btn" data-saidacancel="${f.id}">Cancelar saída</button></span>`:''}</div>${dp&&S.readmEdit===f.id?readmHTML(f):''}`;
   if(!dp||S.saidaEdit!==f.id)return '';
   const av=f.vinc==='avulso',hoje=new Date().toLocaleDateString('pt-BR');
   return `<form id="saidaForm" class="cad-form" data-f="${f.id}"><h3 class="sub" style="margin-top:0">Encerrar vínculo de ${esc(f.nome)}</h3>
@@ -1867,6 +1887,27 @@ $('#view').addEventListener('submit',e=>{
     if(!tipos.length)return toast('Marque pelo menos um tipo de recibo.');
     S.recTipos=tipos;return recibosDoMes(fm.esc.value,tipos);
   }
+  if(fm.id==='readmForm'){
+    const f=byId(fm.dataset.f),emp=fm.empresa.value,obra=fm.obra.value,funcao=fm.funcao.value,vinc=fm.vinc.value,adm=fm.adm.value.trim(),motivo=fm.motivo.value.trim();
+    const d=lerData(adm),ds=saidaData(f);
+    if(!d)return err('Informe a data de início no formato DD/MM/AAAA.');
+    if(ds&&d<=ds)return err(`A data de início precisa ser depois da saída (${f.saida.data}).`);
+    if(d.getFullYear()*12+d.getMonth()!==ANO*12+MES)return err(`A data de início precisa ser em ${MES_NOME} (a competência aberta no topo).`);
+    if(!obra)return err(`Nenhuma obra cadastrada para ${emp}. Cadastre a obra na aba Obras.`);
+    const antes=empresaDe(f);
+    if(emp!==antes){FUNC[antes]=FUNC[antes].filter(x=>x!==f);FUNC[emp].push(f)}
+    (f.saidasAnteriores=f.saidasAnteriores||[]).push({...f.saida,readmitidoEm:adm,admAnterior:f.adm});
+    (f.eventos=f.eventos||[]).push({tipo:'readm',data:adm,txt:`<b>Readmitido</b> na ${esc(emp)} como ${vinc==='avulso'?'avulso (período de teste)':'mensalista'}${motivo?': '+esc(motivo):''}`});
+    delete f.saida;
+    Object.assign(f,{adm,vinc,funcao,vh:[{de:1,vinc}],lot:[{de:1,obra}],contrat:{empresa:emp,obra,funcao,vinc},diariasLancadas:0,adiantQuando:null,cestaReg:null});
+    if(vinc==='avulso')f.diaria=DIARIAS[funcao];else delete f.diaria;
+    if(vinc==='mensalista'){const a=acordo(f);f.acordos=f.acordos.filter(x=>x.desde!==COMP);f.acordos.push({desde:COMP,ben:{},tarifa:null,pg:{},cesta:false,salario:a?.salario||null,ajudaFixa:false,motivo:'Readmissão',quem:'DP'});f.acordos.sort((x,y)=>x.desde.localeCompare(y.desde))}
+    f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='saida'&&!l.feito));
+    S.ponto[f.id]=S.ponto[f.id]||{};
+    registrar(`Readmissão · ${f.nome}`,`Desligado em ${f.saidasAnteriores.slice(-1)[0].data}`,`Readmitido em ${adm} na ${emp} · ${vinc==='avulso'?'avulso':'mensalista'} · ${funcao} · ${OBRAS[obra]?.nome||''}`,motivo||'Readmissão');
+    S.readmEdit=null;S.cadSel=f.id;if(!TODAS()&&S.empresa!==emp){S.empresa=emp;$('#selEmp').value=emp}
+    render();return toast(`${f.nome} readmitido em ${adm} como ${vinc==='avulso'?'avulso':'mensalista'}.${vinc==='mensalista'?' Confira o acordo na ficha.':''}`);
+  }
   if(fm.id==='extraForm'){
     const f=byId(fm.dataset.f),v=parseBRL(fm.valor.value),data=fm.data.value.trim(),motivo=fm.motivo.value.trim().replace(/\s+/g,' ');
     if(!(v>0))return err('Informe o valor pago nessa data.');
@@ -2049,7 +2090,9 @@ $('#view').addEventListener('submit',e=>{
     const nome=fm.nome.value.trim();if(nome.length<3)return err('Informe o nome completo.');
     if(!fm.obra.value)return err(`Nenhuma obra da ${fm.empresa.value} cadastrada. Cadastre a obra na aba Obras.`);
     if(!cpfValido(fm.cpf.value))return err('CPF inválido. Confira os números.');
-    if(ALL.some(x=>soDig(x.cpf)===soDig(fm.cpf.value)))return err('Já existe um funcionário com esse CPF.');
+    {const ja=ALL.find(x=>soDig(x.cpf)===soDig(fm.cpf.value));
+      // diz de quem é o CPF; se a pessoa já saiu, oferece abrir a ficha para readmitir
+      if(ja){fm.querySelector('#formErr').innerHTML=`Esse CPF já é de <b>${esc(ja.nome)}</b> (${empresaDe(ja)}${ja.saida?`, ${esc(saidaTxt(ja).toLowerCase())}`:''}). ${ja.saida?'Para recontratar, abra a ficha e use "Readmitir".':'Não é preciso cadastrar de novo.'} <button class="btn" type="button" data-abrirfunc="${ja.id}">Abrir a ficha</button>`;return}}
     const adm=fm.adm.value.trim();if(!/^\d{2}\/\d{2}\/\d{4}$/.test(adm))return err('Informe a data de admissão no formato DD/MM/AAAA.');
     const id='n'+Date.now(),funcao=fm.funcao.value,vinc=fm.vinc.value,emp=fm.empresa.value;
     const f={id,nome,cpf:fmtCpf(fm.cpf.value),funcao,vinc,vh:[{de:1,vinc}],lot:[{de:1,obra:fm.obra.value}],diaria:vinc==='avulso'?DIARIAS[funcao]:undefined,diariasLancadas:0,
@@ -2571,6 +2614,11 @@ $('#view').addEventListener('click',e=>{
   if(gv){S.tab='funcionarios';S.cadSel=gv.dataset.govinc;S.vincEdit=true;S.cadEdit=false;render();$('#vincForm')?.scrollIntoView({block:'center'});return}
   const vb=e.target.closest('[data-vincedit],[data-vinccancel]');
   if(vb){S.vincEdit=!!vb.dataset.vincedit;S.cadEdit=false;render();if(S.vincEdit)$('#vincForm')?.scrollIntoView({block:'center'});return}
+  const af=e.target.closest('[data-abrirfunc]');
+  if(af){const f=byId(af.dataset.abrirfunc);if(!f)return;if(!ativoNoMes(f))S.verDeslig=true;if(!TODAS()&&S.empresa!==empresaDe(f)){S.empresa=empresaDe(f);$('#selEmp').value=S.empresa}
+    S.cadSel=f.id;S.cadEdit=false;render();$('.cad-main')?.scrollIntoView({block:'start'});return}
+  const rm=e.target.closest('[data-readm]');
+  if(rm){S.readmEdit=rm.dataset.readm||null;render();if(S.readmEdit)$('#readmForm')?.scrollIntoView({block:'center'});return}
   const se=e.target.closest('[data-saidaedit]');
   if(se){S.saidaEdit=se.dataset.saidaedit||null;render();if(S.saidaEdit)$('#saidaForm')?.scrollIntoView({block:'center'});return}
   const sc=e.target.closest('[data-saidacancel]');
@@ -2667,6 +2715,7 @@ $('#view').addEventListener('input',e=>{
 });
 $('#view').addEventListener('change',e=>{
   if(e.target.id==='planObra'){S.planObra=e.target.value;return render()}
+  if(e.target.id==='rEmp'){$('#rObra').innerHTML=opcoesObraEmp(e.target.value);return}
   if(e.target.id==='relDia'){S.relDia=+e.target.value;S.relDiaComp=COMP;return render()}
   if(e.target.id==='sTipo'){const av=e.target.value==='aviso';$('#sIniBox').hidden=!av;$('#sDataLbl').textContent=av?'Fim do aviso (último dia de trabalho)':'Último dia de trabalho';return}
   if(e.target.matches('[data-contaf]')){const f=byId(e.target.dataset.contaf),antes=f.conta||'—';f.conta=e.target.value;
