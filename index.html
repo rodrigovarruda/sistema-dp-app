@@ -857,8 +857,8 @@ function tabelasRelatorios(R){
     :'<p class="hint">Nenhum período programado daqui para a frente.</p>';
   // avulsos do mês: situação do período de teste e diárias por quinzena (paga = quinzena fechada; aberta = previsto)
   const avSit=f=>f.saida?saidaTxt(f):f.vinc==='avulso'&&f.avulsoPrazo?`Avulso por prazo até ${f.avulsoPrazo.ate} (sem período de teste)`:f.vinc==='mensalista'?`Registrado como mensalista em ${admissaoTxt(f)}`:noLimite(f)?`No limite do teste (${nfmt(diasTeste(f))} dias): registrar`:`Em teste · ${nfmt(diasTeste(f))} de ${LIMITE_TESTE} dias`;
-  const avQ=(f,q)=>{const x=S.qf[q]?.[f.id],v=x||valorQ(f,q);return {n:v.n,valor:v.valor,pago:!!x,quando:x?.quando}};
-  const qTd=x=>`<td style="white-space:normal">${x.n?`${nfmt(x.n)} dia(s) · ${brl(x.valor)}<br><span class="hint sub">${x.pago?'paga em '+esc(x.quando.split(' ')[0]):'aberta (previsto)'}</span>`:'—'}</td>`;
+  const avQ=(f,q)=>{const x=S.qf[q]?.[f.id],v=x||valorQ(f,q);return {n:v.n,valor:v.valor,desc:+v.desc||0,pago:!!x,quando:x?.quando}};
+  const qTd=x=>`<td style="white-space:normal">${x.n?`${nfmt(x.n)} dia(s) · ${brl(x.valor)}${x.desc?`<br><span class="hint sub">já descontado adiant. ${brl(x.desc)}</span>`:''}<br><span class="hint sub">${x.pago?'paga em '+esc(x.quando.split(' ')[0]):'aberta (previsto)'}</span>`:'—'}</td>`;
   const avL=R.avulsos.map(f=>({f,q1:avQ(f,1),q2:avQ(f,2)}));
   t.avulsos=avL.length?`<table class="ben"><thead><tr><th style="text-align:left">Funcionário</th><th style="text-align:left">Empresa · obra</th><th style="text-align:left">Início do teste</th><th style="text-align:left">Situação</th><th>Diária</th><th>1ª quinzena</th><th>2ª quinzena</th><th>Total do mês</th></tr></thead><tbody>
     ${avL.map(({f,q1,q2})=>`<tr><td style="text-align:left;white-space:normal"><b>${esc(f.nome)}</b><br><span class="hint sub">${esc(f.funcao)}${f.cpf?' · '+esc(f.cpf):''}</span></td><td style="text-align:left;white-space:normal">${empresaDe(f)} · ${esc(OBRAS[lotacao(f,R.dr)]?.nome||'—')}</td>
@@ -951,6 +951,7 @@ const FORMAS_PAG=[['esp','Espécie'],['alim','Alelo Alimentação'],['livre','Al
 function pagamentosDe(f){
   const fe=S.fechF[f.id],a=calcAdiant(f),r={adi:0,dia:0,auxEsp:0,alim:0,livre:0,natal:0,cesta:0};
   if(a&&a.total>0&&f.adiantQuando&&f.vinc==='mensalista')r.adi=a.total;
+  if(f.adiantAv?.comp===COMP)r.adi+=f.adiantAv.valor;
   for(const q of [1,2])r.dia+=+(S.qf[q]?.[f.id]?.valor)||0;
   if(fe){r.alim=+fe.alelo?.alim||0;r.livre=+fe.alelo?.livre||0;r.natal=+fe.alelo?.natal||0;
     r.auxEsp=Math.max(0,fe.especie!=null?+fe.especie:(+fe.aux||0)-aleloSoma(fe.alelo));
@@ -1581,6 +1582,7 @@ function renderCad(){
       ${acordoInputs(null)}</div>
       <p class="hint" id="testeBox" hidden style="margin:0">Avulso entra em período de teste: no máximo ${LIMITE_TESTE} dias trabalhados antes do registro (a não ser que seja avulso por prazo).</p>
       <div id="nPrazoWrap" hidden>${prazoCampo('nPrazoBox',`01/${MM}/${ANO}`)}</div>
+      <div class="field" id="nAdavWrap" hidden><label class="ac-chk" style="font-weight:500"><input type="checkbox" name="adavChk"> Pagar adiantamento para despesas (descontado depois nas diárias), no dia do início, de R$</label><input type="text" name="adavValor" inputmode="decimal" value="100,00" style="max-width:120px"></div>
       <p class="hint" id="acAvulso" hidden>Avulso recebe só a diária da função, que já inclui passagem e alimentação.</p><div id="formErr" class="err"></div>
       <div class="actions"><button class="btn primary" type="submit">Cadastrar</button><button class="btn" type="button" data-cad="${fs[0]?.id||''}">Cancelar</button></div></form>`;
   } else if(S.cadSel==='importar'){
@@ -1622,7 +1624,7 @@ function renderCad(){
        ${f.vinc==='avulso'?`<h3 class="sub">Pagamento do avulso</h3>
        <div class="ac-cards"><div class="ac-card"><span class="hint">Diária de ${esc(f.funcao)}</span><b class="num">${brl(f.diaria||DIARIAS[f.funcao])}</b><span class="hint">por dia de serviço</span></div>
        <div class="ac-card off"><span class="hint">Passagem e alimentação</span><b>Incluídas na diária</b></div></div>
-       <p class="hint">O valor vem da tabela de diárias por função. O preço de cada diária fica guardado, mesmo que a tabela mude depois.</p>`:`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Acordo vigente em ${MES_NOME}</h3>${dp&&!S.cadEdit?`<button class="btn primary" data-cadedit="1">Alterar acordo</button>`:''}</div><p class="hint" style="margin:0 0 8px">Vale a partir de ${compLabel(A.desde)} · ${esc(A.motivo)}</p>
+       <p class="hint">O valor vem da tabela de diárias por função. O preço de cada diária fica guardado, mesmo que a tabela mude depois.</p>${adavHTML(f,dp)}`:`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Acordo vigente em ${MES_NOME}</h3>${dp&&!S.cadEdit?`<button class="btn primary" data-cadedit="1">Alterar acordo</button>`:''}</div><p class="hint" style="margin:0 0 8px">Vale a partir de ${compLabel(A.desde)} · ${esc(A.motivo)}</p>
        <div class="ac-cards">${acordoResumo(A)}</div>`}`;
       if(dp&&S.vincEdit){
         const novo=f.vinc==='avulso'?'mensalista':'avulso';
@@ -1691,6 +1693,27 @@ function abrirBusca(forcar){
 // Ficha: situação de saída (aviso prévio, desligamento, dispensa) ou o formulário para encerrar o vínculo
 // Avulso por prazo: trabalha como avulso por um tempo combinado (ex.: 6 meses), sem período de teste; lembrete no fim do prazo
 const maisMeses=(data,n)=>{const d=lerData(data)||new Date();const r=new Date(d.getFullYear(),d.getMonth()+n,d.getDate());return fmtData(r)};
+// adiantamento para despesas do avulso: opcional, pago em espécie e descontado das diárias
+function darAdav(f,valor,data){
+  const d=lerData(data);if(f.adiantAv)(f.adiantAvAnteriores=f.adiantAvAnteriores||[]).push(f.adiantAv);
+  f.adiantAv={valor:Math.round(valor*100)/100,data,comp:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),quando:new Date().toLocaleDateString('pt-BR'),desc:[]};
+  registrar(`Adiantamento para despesas · ${f.nome}`,'—',`${brl(f.adiantAv.valor)} pago em ${data}, a descontar das diárias`,'Adiantamento do avulso');
+}
+function adavHTML(f,dp){
+  const a=f.adiantAv,sd=adSaldo(f);
+  if(!a&&!(dp&&!f.saida))return '';
+  let h=`<div class="teste-info" id="adavFicha">`;
+  if(a){const ds=(a.desc||[]).map(x=>`${brl(x.valor)} na ${QZ[x.q].nome} de ${compLabel(x.comp)}`).join(', ');
+    h+=`<b>Adiantamento para despesas: ${brl(a.valor)} pago em ${esc(a.data)}</b><span>${ds?'Descontado: '+ds+'. ':''}${sd>0?`Falta descontar ${brl(sd)}: sai sozinho das próximas diárias.`:'Já foi todo descontado das diárias.'}</span>`;
+    if(dp&&S.adavEdit!==f.id)h+=`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-veradav="${f.id}">Ver recibo</button>${!(a.desc||[]).length?`<button class="btn" data-adavcancel="${f.id}">Cancelar adiantamento</button>`:''}${sd<=0&&!f.saida?`<button class="btn" data-adavedit="${f.id}">Novo adiantamento</button>`:''}</span>`;
+  }else if(S.adavEdit!==f.id)h+=`<span>Se ele for receber um adiantamento para despesas (ex.: R$ 100,00), lance aqui. É opcional e é descontado depois nas diárias.</span><span><button class="btn" data-adavedit="${f.id}">Pagar adiantamento para despesas</button></span>`;
+  if(dp&&S.adavEdit===f.id){const h0=new Date(),noMes=d=>d&&d.getFullYear()===ANO&&d.getMonth()===MES,dPad=noMes(h0)?fmtData(h0):noMes(lerData(f.adm))?f.adm:`01/${String(MES+1).padStart(2,'0')}/${ANO}`;
+    h+=`<form id="adavForm" class="cad-form" style="margin:6px 0 0"><div class="form-grid"><div class="field"><label for="avValor">Valor do adiantamento (R$)</label><input type="text" id="avValor" name="valor" inputmode="decimal" value="100,00"></div>
+      <div class="field"><label for="avData">Pago em</label><input type="text" id="avData" name="data" data-date="1" inputmode="numeric" value="${dPad}" placeholder="DD/MM/AAAA"></div></div>
+      <p class="hint" style="margin:0">Sai em espécie, com recibo. É descontado das diárias da quinzena em que foi pago (ou das seguintes, se não der).</p>
+      <div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Pagar e emitir recibo</button><button class="btn" type="button" data-adavedit="">Cancelar</button></div></form>`}
+  return h+'</div>';
+}
 function aplicarPrazo(f,ate){
   const antes=f.avulsoPrazo?.ate;f.avulsoPrazo={ate,quando:new Date().toLocaleDateString('pt-BR')};
   f.lembretes=(f.lembretes||[]).filter(l=>!(l.auto==='prazo'&&!l.feito));
@@ -1932,6 +1955,16 @@ $('#view').addEventListener('submit',e=>{
     S.readmEdit=null;S.verDeslig=false;S.cadSel=f.id;if(!TODAS()&&S.empresa!==emp){S.empresa=emp;$('#selEmp').value=emp}
     render();return toast(`${f.nome} readmitido em ${adm} como ${vinc==='avulso'?'avulso':'mensalista'}.${vinc==='mensalista'?' Confira o acordo na ficha.':''}`);
   }
+  if(fm.id==='adavForm'){
+    const f=byId(S.cadSel),valor=parseBRL(fm.valor.value),data=fm.data.value.trim(),d=lerData(data);
+    if(!f||f.vinc!=='avulso')return;
+    if(!(valor>0))return err('Informe o valor do adiantamento (ex.: 100,00).');
+    if(!d)return err('Informe a data do pagamento no formato DD/MM/AAAA.');
+    if(lerData(f.adm)&&d<lerData(f.adm))return err(`A data não pode ser antes do início (${f.adm}).`);
+    darAdav(f,valor,data);S.adavEdit=null;render();
+    modalRecibos(`Adiantamento para despesas · ${esc(f.nome)}`,`Pago em ${esc(data)}. Será descontado das diárias de serviço avulso.`,reciboHTML(f,'adiantAv',{versao:1}));
+    return toast(`Adiantamento de ${brl(f.adiantAv.valor)} lançado para ${f.nome}. Será descontado das próximas diárias.`);
+  }
   if(fm.id==='prazoForm'){
     const f=byId(S.cadSel),ate=fm.ate.value.trim(),d=lerData(ate);
     if(!f||f.vinc!=='avulso')return;
@@ -2129,11 +2162,13 @@ $('#view').addEventListener('submit',e=>{
     const adm=fm.adm.value.trim();if(!/^\d{2}\/\d{2}\/\d{4}$/.test(adm))return err('Informe a data de admissão no formato DD/MM/AAAA.');
     const prazoN=fm.vinc.value==='avulso'&&fm.prazoChk&&fm.prazoChk.checked?fm.prazoAte.value.trim():'';
     if(fm.vinc.value==='avulso'&&fm.prazoChk&&fm.prazoChk.checked&&!(lerData(prazoN)>lerData(adm)))return err('Informe até quando ele fica como avulso por prazo (DD/MM/AAAA, depois da admissão).');
+    const adavN=fm.vinc.value==='avulso'&&fm.adavChk?.checked?parseBRL(fm.adavValor.value):0;
+    if(fm.vinc.value==='avulso'&&fm.adavChk?.checked&&!(adavN>0))return err('Informe o valor do adiantamento para despesas (ex.: 100,00).');
     const id='n'+Date.now(),funcao=fm.funcao.value,vinc=fm.vinc.value,emp=fm.empresa.value;
     const f={id,nome,cpf:fmtCpf(fm.cpf.value),funcao,vinc,vh:[{de:1,vinc}],lot:[{de:1,obra:fm.obra.value}],diaria:vinc==='avulso'?DIARIAS[funcao]:undefined,diariasLancadas:0,
       adm,contrat:{empresa:emp,obra:fm.obra.value,funcao,vinc},
       acordos:[{desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,peric:ac.peric||null,insal:ac.insal||null,insalBase:ac.insalBase||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo da admissão',quem:'DP'}]};
-    FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};S.cadSel=id;if(prazoN)aplicarPrazo(f,prazoN);
+    FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};S.cadSel=id;if(prazoN)aplicarPrazo(f,prazoN);if(adavN)darAdav(f,adavN,adm);
     if(emp!==S.empresa&&!TODAS()){S.empresa=emp;$('#selEmp').value=emp}
     registrar(`Cadastro · ${nome}`,'—',`Admitido na ${emp} em ${adm} para ${OBRAS[fm.obra.value].nome} · `+(vinc==='avulso'?'avulso':resumoTxt(f.acordos[0])),'Admissão');
     // admitido direto como mensalista neste mês: entrega na entrada o auxílio dos dias restantes e a cesta do mês
@@ -2194,9 +2229,13 @@ function reciboHTML(f,tipo,rec){
   const c=calc(f),emp=empresaDe(f);
   // data de assinatura: 1ª quinzena = último dia útil até o dia 15; 2ª quinzena e auxílio-transporte = último dia útil do mês; adiantamento = dia do registro
   const ultUtil=d=>{for(let x=d;x>=1;x--)if(obrig(x))return x;return d};
-  const now=dd(tipo==='diarias'?ultUtil(QZ[rec.q].fim):tipo==='adiant'?calcAdiant(f).de:tipo==='cestaReg'?f.cestaReg.de:ultUtil(NDIAS))+'/'+ANO;
+  const now=tipo==='adiantAv'?f.adiantAv.data:dd(tipo==='diarias'?ultUtil(QZ[rec.q].fim):tipo==='adiant'?calcAdiant(f).de:tipo==='cestaReg'?f.cestaReg.de:ultUtil(NDIAS))+'/'+ANO;
   let titulo,valor,texto,detalhe='',dias;
-  if(tipo==='cesta'||tipo==='cestaReg'){
+  if(tipo==='adiantAv'){
+    const a=f.adiantAv;valor=a.valor;titulo='Recibo de adiantamento para despesas';
+    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), a título de <b>adiantamento para despesas</b>, que será <b>descontado no pagamento das minhas diárias</b> de serviço avulso.`;
+    dias=`Data do adiantamento: ${esc(a.data)} · Obra: ${esc(OBRAS[lotacao(f,1)]?.nome||'—')}`;
+  } else if(tipo==='cesta'||tipo==='cestaReg'){
     valor=0;titulo='Recibo de cesta básica';const mesRef=tipo==='cestaReg'?MES_NOME:PROX_NOME+'/'+(MES===11?ANO+1:ANO);
     texto=`Declaro que recebi uma <b>cesta básica</b>, em substituição ao almoço, de acordo com a <b>Convenção Coletiva de Trabalho ${esc((EMPRESAS[emp]||{}).cct||'2025/2026')}</b>, referente ao mês de <b>${mesRef}</b>.`;
     dias=`Empresa: ${esc((EMPRESAS[emp]||{}).razao||emp)}`;
@@ -2206,12 +2245,12 @@ function reciboHTML(f,tipo,rec){
     dias=`Dias úteis considerados: ${a.dias} (de ${dd(a.de)} a ${dd(NDIAS)}) · Obra: ${esc(OBRAS[lotacao(f,a.de)].nome)}`;
     if(S.recDetalhe)detalhe=a.itens.map(x=>`<tr><td>${x.nome} · ${x.f}</td><td>${brl(x.valor)}</td></tr>`).join('');
   } else if(tipo==='diarias'){
-    const vq=valorQ(f,rec.q),ds=vq.ds;
+    const vq=S.qf[rec.q]?.[f.id]||valorQ(f,rec.q),ds=vq.ds,bq=brutoQ(vq),dq=+vq.desc||0;
     valor=vq.valor;titulo=`Recibo de pagamento - ${QZ[rec.q].nome}`;
     const obras=[...new Set(ds.map(d=>{const r=S.ponto[f.id][d];return OBRAS[resolve(r.o)]?.nome||r.o}))].join(', ');
-    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente a <b>${nfmt(vq.n)} diária(s)</b> de serviço prestado na função de ${esc(f.funcao)}, na <b>${QZ[rec.q].nome} de ${MES_NOME}</b> (${dd(QZ[rec.q].ini)} a ${dd(QZ[rec.q].fim)}/${ANO}).`;
+    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente a <b>${nfmt(vq.n)} diária(s)</b> de serviço prestado na função de ${esc(f.funcao)}, na <b>${QZ[rec.q].nome} de ${MES_NOME}</b> (${dd(QZ[rec.q].ini)} a ${dd(QZ[rec.q].fim)}/${ANO})${dq?`, já descontado o <b>adiantamento para despesas de ${brl(dq)}</b> recebido em ${esc(f.adiantAv?.data||'')}`:''}.`;
     dias=`Dias de serviço: ${ds.map(d=>dd(d)).join(', ')||'—'} · Obra(s): ${esc(obras)||'—'}`;
-    detalhe=`<tr><td>${nfmt(vq.n)} diária(s) × ${brl(f.diaria||DIARIAS[f.funcao])}</td><td>${brl(valor)}</td></tr>`;
+    detalhe=`<tr><td>${nfmt(vq.n)} diária(s) × ${brl(f.diaria||DIARIAS[f.funcao])}</td><td>${brl(bq)}</td></tr>`+(dq?`<tr><td>(−) Adiantamento para despesas recebido em ${esc(f.adiantAv?.data||'')}</td><td>−${brl(dq)}</td></tr>`:'');
   } else {
     const ks=Object.keys(BEN_NOMES).filter(k=>c.itens[k]);
     const fe=S.fechF[f.id],al=tipo==='alelo'||tipo==='natal'?fe.alelo:null,soma=ks.reduce((a,k)=>a+c.itens[k].valor,0),noCartao=fe?aleloSoma(fe.alelo):0;
@@ -2229,7 +2268,7 @@ function reciboHTML(f,tipo,rec){
     <h3>${titulo}</h3>
     <p>${texto}</p>
     ${detalhe?`<table class="rec-tab">${detalhe}<tr><td><b>Total</b></td><td><b>${brl(valor)}</b></td></tr></table>`:''}
-    <dl class="rec-dados"><div><dt>Funcionário</dt><dd>${esc(f.nome)}</dd></div><div><dt>CPF</dt><dd class="num">${cpfTxt(f)}</dd></div><div><dt>Função</dt><dd>${esc(f.funcao)}</dd></div><div><dt>Competência</dt><dd>${tipo==='aux'||tipo==='alelo'||tipo==='natal'||tipo==='cesta'?PROX_NOME+'/'+(MES===11?ANO+1:ANO):MES_NOME}</dd></div></dl>
+    <dl class="rec-dados"><div><dt>Funcionário</dt><dd>${esc(f.nome)}</dd></div><div><dt>CPF</dt><dd class="num">${cpfTxt(f)}</dd></div><div><dt>Função</dt><dd>${esc(f.funcao)}</dd></div><div><dt>Competência</dt><dd>${tipo==='adiantAv'?compLabel(f.adiantAv.comp):tipo==='aux'||tipo==='alelo'||tipo==='natal'||tipo==='cesta'?PROX_NOME+'/'+(MES===11?ANO+1:ANO):MES_NOME}</dd></div></dl>
     <p class="hint">${dias}</p>
     <div class="assin"><span>${esc(OBRAS[lotacao(f,NDIAS)]?.cidade||'')}, ${now}</span><span class="linha">${esc(f.nome)}</span></div>
     <footer class="hint">Emitido em ${now} · versão ${rec.versao} · Sistema DP</footer></article>`;
@@ -2240,8 +2279,24 @@ const qDe=d=>d<=15?1:2;
 function valorQ(f,q){
   const r=QZ[q],p=S.ponto[f.id];
   const ds=Object.keys(p).map(Number).filter(d=>d>=r.ini&&d<=r.fim&&CODES[p[d].c].trab&&vincDia(f,d)==='avulso').sort((a,b)=>a-b);
-  const n=ds.reduce((a,d)=>a+CODES[p[d].c].peso,0),nv=ds.filter(d=>!resolve(p[d].o)).length;
-  return {ds,n,nv,valor:n*(f.diaria||DIARIAS[f.funcao])};
+  const n=ds.reduce((a,d)=>a+CODES[p[d].c].peso,0),nv=ds.filter(d=>!resolve(p[d].o)).length,bruto=n*(f.diaria||DIARIAS[f.funcao]);
+  const desc=adDescQ(f,q,bruto);
+  return {ds,n,nv,bruto,desc,valor:Math.round((bruto-desc)*100)/100};
+}
+// Adiantamento para despesas do avulso (f.adiantAv={valor,data,comp,quando,desc:[{comp,q,valor}]}):
+// pago em espécie na entrada e descontado das diárias das quinzenas seguintes até zerar
+const brutoQ=x=>x.bruto??x.valor;
+const adDescontado=(f,exceto)=>(f.adiantAv?.desc||[]).filter(x=>!(exceto&&x.comp===exceto.comp&&x.q===exceto.q)).reduce((s,x)=>s+x.valor,0);
+const adSaldo=f=>f.adiantAv?Math.round((f.adiantAv.valor-adDescontado(f))*100)/100:0;
+function adDescQ(f,q,bruto){
+  const a=f.adiantAv;if(!a||!bruto)return 0;
+  const fe=S.qf[q]?.[f.id];if(fe)return +fe.desc||0;           // quinzena fechada: vale o que foi descontado
+  const d=lerData(a.data);if(!d)return 0;
+  const k=ANO*12+MES,ka=d.getFullYear()*12+d.getMonth();
+  if(k<ka||(k===ka&&QZ[q].fim<d.getDate()))return 0;          // quinzena paga antes do adiantamento
+  let saldo=a.valor-adDescontado(f,{comp:COMP,q});
+  if(q===2&&!S.qf[1]?.[f.id])saldo-=valorQ(f,1).desc;          // a 1ª quinzena ainda aberta desconta primeiro
+  return Math.max(0,Math.min(Math.round(saldo*100)/100,bruto));
 }
 function modalRecibos(titulo,sub,out,refresh){
   $('#modal').innerHTML=`<div class="overlay" id="ov"><div class="editor recibos">
@@ -2269,9 +2324,11 @@ function recibosFicha(f){
     ${linhas.length?`<table class="rec-tab" style="width:100%">${linhas.map(l=>`<tr><td>${l[0]}<br><span class="hint">${l[1]}</span></td><td>${brl(l[2])}</td></tr>`).join('')}</table>`:''}
     <div class="pay-foot"><span class="hint">${obs}</span>${botao||''}</div></div>`)};
   if(temAvulso(f))for(const q of [1,2]){const v=valorQ(f,q),x=S.qf[q][f.id];if(!x&&!v.n)continue;const u=x||v;
-    bloco(`Recibo de pagamento - ${QZ[q].nome} · ${MES_NOME}`,!!x,u.valor,[[`${nfmt(u.n)} diária(s) × ${brl(f.diaria||DIARIAS[f.funcao])}`,'dias: '+u.ds.map(dd).join(', '),u.valor]],
+    bloco(`Recibo de pagamento - ${QZ[q].nome} · ${MES_NOME}`,!!x,u.valor,[[`${nfmt(u.n)} diária(s) × ${brl(f.diaria||DIARIAS[f.funcao])}`,'dias: '+u.ds.map(dd).join(', '),brutoQ(u)],...(u.desc?[[`(−) Adiantamento para despesas`,`recebido em ${esc(f.adiantAv?.data||'')}${x?'':' · desconto previsto'}`,-u.desc]]:[])],
       x?`${sel('q'+q)}<button class="btn" data-qrec="${q}:${f.id}">Ver recibo</button>`:(pode&&!v.nv?`<button class="btn primary" data-qfechone="${q}:${f.id}">Fechar quinzena e emitir</button>`:''),
       x?`fechada em ${x.quando}`:`aberta · fecha em ${dd(QZ[q].fim)}${v.nv?' · vincular nome de obra':''}`)}
+  if(f.adiantAv&&f.adiantAv.comp===COMP){const av=f.adiantAv,sd=adSaldo(f);
+    bloco(`Adiantamento para despesas · ${MES_NOME}`,true,av.valor,[],`${sel('adiantAv')}<button class="btn" data-veradav="${f.id}">Ver recibo</button>`,`pago em ${esc(av.data)} · ${sd>0?`falta descontar ${brl(sd)} das diárias`:'já descontado das diárias'}`)}
   const a=calcAdiant(f);
   if(a&&a.total>0&&f.adiantQuando&&f.vinc==='mensalista')bloco(`Adiantamento auxílio-transporte · ${MES_NOME}`,true,a.total,a.itens.map(x=>[x.nome+' · '+MES_CURTO,x.f,x.valor]),`${sel('adiant')}<button class="btn" data-veradiant="${f.id}">Ver recibo</button>`,`no registro · ${dd(a.de)} a ${dd(NDIAS)} · emitido em ${f.adiantQuando}`);
   const ks=Object.keys(BEN_NOMES).filter(k=>c.itens[k]);
@@ -2298,9 +2355,20 @@ function recibosFicha(f){
   const acoes=nSel>1?`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-rseltodos="1">Selecionar todos</button><button class="btn primary" data-rselimp="${f.id}">Imprimir selecionados</button></span>`:'';
   return h+`<div class="ficha-top" style="margin-top:14px;flex-wrap:wrap;gap:8px"><h3 class="sub" style="margin:0">Pagamentos de ${MES_NOME}</h3>${acoes}<span class="chip st">Total no mês: ${brl(total)}</span></div>`+blocos.join('');
 }
+// fecha a quinzena de um avulso: grava diárias, desconto do adiantamento e valor pago
+function gravarQ(q,id,qd){
+  const f=byId(id),v=valorQ(f,q),k=q+':'+id;S.qver[k]=(S.qver[k]||0)+1;S.qf[q][id]={...v,quando:qd,versao:S.qver[k]};
+  if(v.desc&&f.adiantAv){const a=f.adiantAv;a.desc=(a.desc||[]).filter(x=>!(x.comp===COMP&&x.q===q));a.desc.push({comp:COMP,q,valor:v.desc})}
+  registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Aberta',`Fechada · ${nfmt(v.n)} diária(s) · ${brl(v.bruto)}${v.desc?` − adiantamento ${brl(v.desc)} = ${brl(v.valor)}`:''}`,'Fechamento da quinzena');
+}
+function reabrirQ(q,f,m){
+  q=+q;delete S.qf[q][f.id];
+  if(f.adiantAv?.desc)f.adiantAv.desc=f.adiantAv.desc.filter(x=>!(x.comp===COMP&&x.q===q));
+  registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Fechada','Reaberta',m);
+}
 function fecharQ(q,ids){
   const now=new Date(),qd=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  ids.forEach(id=>{const f=byId(id),v=valorQ(f,q),k=q+':'+id;S.qver[k]=(S.qver[k]||0)+1;S.qf[q][id]={...v,quando:qd,versao:S.qver[k]};registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Aberta',`Fechada · ${nfmt(v.n)} diária(s) · ${brl(v.valor)}`,'Fechamento da quinzena')});
+  ids.forEach(id=>gravarQ(q,id,qd));
   render();emitirQ(q,ids);
 }
 function emitirQ(q,ids){  const out=ids.map(id=>{const f=byId(id),x=S.qf[q][id];return reciboHTML(f,'diarias',{q,quando:x.quando,versao:x.versao})}).join('');
@@ -2353,7 +2421,7 @@ function quinzenaHTML(dp){
       const fe=S.qf[q][f.id],v=fe||valorQ(f,q),bloq=!fe&&valorQ(f,q).nv>0;
       h+=`<tr>${pode?`<td>${fe?'':`<input type="checkbox" class="qchk" data-q="${q}" value="${f.id}" ${bloq?'disabled':''} aria-label="Selecionar ${esc(f.nome)}">`}</td>`:''}
         <td style="text-align:left;font-family:var(--f-body)"><b>${esc(f.nome)}</b><br><span class="hint">${esc(f.funcao)} · diária ${brl(f.diaria||DIARIAS[f.funcao])}</span></td>
-        <td style="text-align:left;white-space:normal;font-family:var(--f-body)">${v.ds.map(d=>dd(d)).join(', ')}</td><td>${nfmt(v.n)}</td><td>${brl(v.valor)}</td>
+        <td style="text-align:left;white-space:normal;font-family:var(--f-body)">${v.ds.map(d=>dd(d)).join(', ')}</td><td>${nfmt(v.n)}</td><td>${brl(v.valor)}${v.desc?`<br><span class="hint">${brl(brutoQ(v))} − adiant. ${brl(v.desc)}</span>`:''}</td>
         <td style="text-align:left;font-family:var(--f-body)">${fe?`<span class="chip ok" style="padding:2px 9px">Fechado</span> <span class="hint">${fe.quando}</span>`:bloq?'<span class="hint">Vincular nome de obra</span>':'<span class="hint">Liberado</span>'}</td>
         ${dp?`<td style="white-space:nowrap">${fe?`<button class="btn primary" data-qrec="${q}:${f.id}">Recibo</button>${pode?` <button class="btn" data-qreab="${q}:${f.id}">Reabrir</button>`:''}`:''}</td>`:''}</tr>`;
     }
@@ -2429,15 +2497,16 @@ function listaAlelo(){
   $('#copiarAlelo').onclick=()=>{navigator.clipboard.writeText(tsv).then(()=>toast('Lista copiada. Cole no Excel.')).catch(()=>toast('Não foi possível copiar.'))};
 }
 // Recibos já emitidos de um funcionário, nos tipos pedidos: adiant, cestaReg, q1, q2, aux (com Alelo/NatalCard) e cesta
-const RECIBO_TIPOS=['adiant','cestaReg','q1','q2','aux','cartoes','cesta'];
+const RECIBO_TIPOS=['adiantAv','adiant','cestaReg','q1','q2','aux','cartoes','cesta'];
 const proxRef=()=>`${PROX_NOME}/${MES===11?ANO+1:ANO}`;
-const RECIBO_NOMES=()=>({adiant:`Adiantamento de entrada · ${MES_NOME}`,cestaReg:`Cesta básica do registro · ${MES_NOME}`,q1:`Diárias 1ª quinzena · ${MES_NOME}`,q2:`Diárias 2ª quinzena · ${MES_NOME}`,
+const RECIBO_NOMES=()=>({adiantAv:`Adiantamento para despesas · ${MES_NOME}`,adiant:`Adiantamento de entrada · ${MES_NOME}`,cestaReg:`Cesta básica do registro · ${MES_NOME}`,q1:`Diárias 1ª quinzena · ${MES_NOME}`,q2:`Diárias 2ª quinzena · ${MES_NOME}`,
   aux:`Auxílio-transporte (ajuda, café, alimentação, passagens) · ${proxRef()}`,cartoes:`Cartões Alelo/NatalCard · ${proxRef()}`,cesta:`Cesta básica · ${proxRef()}`});
 function recibosDe(f,tipos){
   let html='',n=0;const add=(t,o)=>{html+=reciboHTML(f,t,o);n++};
   const a=calcAdiant(f),fe=S.fechF[f.id];
   for(const t of RECIBO_TIPOS){if(!tipos.includes(t))continue;
     if(t==='adiant'&&a&&a.total>0&&f.adiantQuando&&f.vinc==='mensalista')add('adiant',{quando:f.adiantQuando,versao:1});
+    if(t==='adiantAv'&&f.adiantAv?.comp===COMP)add('adiantAv',{versao:1});
     if(t==='cestaReg'&&temCestaReg(f))add('cestaReg',{versao:1});
     if(t==='q1'||t==='q2'){const q=+t[1],x=S.qf[q][f.id];if(x)add('diarias',{q,quando:x.quando,versao:x.versao})}
     if(fe&&(t==='aux'||t==='cartoes'||t==='cesta')){const rec=S.recibos[f.id]||{versao:1,quando:fe.quando,total:calc(f).total};
@@ -2595,13 +2664,13 @@ $('#view').addEventListener('click',e=>{
   if(qfb){const q=+qfb.dataset.qfech,ids=[...document.querySelectorAll(`.qchk[data-q="${q}"]:checked`)].map(c=>c.value);
     if(!ids.length)return toast('Marque pelo menos um avulso liberado.');
     const now=new Date(),qd=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-    ids.forEach(id=>{const f=byId(id),v=valorQ(f,q),k=q+':'+id;S.qver[k]=(S.qver[k]||0)+1;S.qf[q][id]={...v,quando:qd,versao:S.qver[k]};registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Aberta',`Fechada · ${nfmt(v.n)} diária(s) · ${brl(v.valor)}`,'Fechamento da quinzena')});
+    ids.forEach(id=>gravarQ(q,id,qd));
     render();emitirQ(q,ids);return toast(`${QZ[q].nome}: ${ids.length} avulso(s) fechado(s).`)}
   const rcb=e.target.closest('[data-reabcal]');
   if(rcb){const m=($('#motReabCal')?.value||'').trim();if(m.length<4)return toast('Escreva o motivo da reabertura.');
     const [q,id]=rcb.dataset.reabcal.split(':'),f=byId(id);
     if(q==='m'){delete S.fechF[id];registrar(`Fechamento · ${f.nome} · ${MES_NOME}`,'Fechado','Reaberto',m)}
-    else{delete S.qf[q][id];registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Fechada','Reaberta',m)}
+    else{reabrirQ(q,f,m)}
     render();return toast(`${f.nome} reaberto. Os dias já podem ser editados.`)}
   const gc=e.target.closest('[data-govcal]');if(gc){S.tab='calendario';S.calEmp=gc.dataset.govcal;render();return}
   const fo=e.target.closest('[data-fechone]');
@@ -2614,7 +2683,7 @@ $('#view').addEventListener('click',e=>{
   if(qr){const [q,id]=qr.dataset.qrec.split(':');emitirQ(+q,id==='todos'?Object.keys(S.qf[q]).filter(i=>visiveis().some(f=>f.id===i)):[id]);return}
   const qb=e.target.closest('[data-qreab]');
   if(qb){const [q,id]=qb.dataset.qreab.split(':'),m=($('#motQ'+q)?.value||'').trim();if(m.length<4)return toast('Escreva o motivo para reabrir a quinzena.');
-    const f=byId(id);delete S.qf[q][id];registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Fechada','Reaberta',m);render();return toast(`${QZ[q].nome} de ${f.nome} reaberta.`)}
+    const f=byId(id);reabrirQ(q,f,m);render();return toast(`${QZ[q].nome} de ${f.nome} reaberta.`)}
   const gcr=e.target.closest('[data-gerarcestareg]');
   const gad=e.target.closest('[data-geraradiant]');
   if(gad){const f=byId(gad.dataset.geraradiant),a=calcAdiant(f);if(!a)return;
@@ -2625,6 +2694,7 @@ $('#view').addEventListener('click',e=>{
   const cu=e.target.closest('[data-custo]');if(cu){S.custoAberto=S.custoAberto===cu.dataset.custo?null:cu.dataset.custo;return render()}
   const vcr=e.target.closest('[data-vercestareg]');if(vcr)return mostrarAdiant(byId(vcr.dataset.vercestareg),'cesta');
   const vc=e.target.closest('[data-vercesta]');if(vc)return emitirCesta([vc.dataset.vercesta]);
+  const vav=e.target.closest('[data-veradav]');if(vav){const f=byId(vav.dataset.veradav);return modalRecibos(`Adiantamento para despesas · ${esc(f.nome)}`,`Pago em ${esc(f.adiantAv.data)}. Descontado das diárias de serviço avulso.`,reciboHTML(f,'adiantAv',{versao:1}))}
   const va=e.target.closest('[data-veradiant]');if(va)return mostrarAdiant(byId(va.dataset.veradiant),'adiant');
   if(e.target.closest('[data-listaalelo]'))return listaAlelo();
   if(e.target.closest('[data-relimp]'))return imprimirRelatorios();
@@ -2652,6 +2722,13 @@ $('#view').addEventListener('click',e=>{
   const af=e.target.closest('[data-abrirfunc]');
   if(af){const f=byId(af.dataset.abrirfunc);if(!f)return;if(!ativoNoMes(f))S.verDeslig=true;if(!TODAS()&&S.empresa!==empresaDe(f)){S.empresa=empresaDe(f);$('#selEmp').value=S.empresa}
     S.cadSel=f.id;S.cadEdit=false;render();$('.cad-main')?.scrollIntoView({block:'start'});return}
+  const ae=e.target.closest('[data-adavedit]');
+  if(ae){S.adavEdit=ae.dataset.adavedit||null;render();if(S.adavEdit)$('#adavForm')?.scrollIntoView({block:'center'});return}
+  const ac=e.target.closest('[data-adavcancel]');
+  if(ac){const f=byId(ac.dataset.adavcancel);if(!f?.adiantAv||(f.adiantAv.desc||[]).length)return;
+    if(!confirm(`Cancelar o adiantamento de ${brl(f.adiantAv.valor)} de ${f.nome}?\n\nUse só se foi lançado por engano (o dinheiro não foi entregue).`))return;
+    registrar(`Adiantamento para despesas · ${f.nome}`,`${brl(f.adiantAv.valor)} pago em ${f.adiantAv.data}`,'Cancelado','Lançado por engano');
+    const ant=f.adiantAvAnteriores?.pop();if(ant)f.adiantAv=ant;else delete f.adiantAv;render();return toast('Adiantamento cancelado.')}
   const pz=e.target.closest('[data-prazoedit]');
   if(pz){S.prazoEdit=pz.dataset.prazoedit||null;render();if(S.prazoEdit)$('#prazoForm')?.scrollIntoView({block:'center'});return}
   const pt=e.target.closest('[data-prazotirar]');
@@ -2801,7 +2878,7 @@ $('#view').addEventListener('change',e=>{
       EMPRESAS[k].logo=c.toDataURL('image/png');registrar(`Empresa · ${k}`,'—','Logomarca atualizada','Dados da empresa');render();toast('Logomarca salva.')};img.src=r.result};
     r.readAsDataURL(file);return}
   if(e.target.id==='rVinc'){$('#rPrazoBox').hidden=e.target.value!=='avulso';return}
-  if(e.target.id==='nVinc'){const av=e.target.value==='avulso';$('#testeBox').hidden=!av;$('#nPrazoWrap').hidden=!av;$('#nAdmLbl').textContent=av?'Início do período de teste':'Data de admissão';$('#acBloco').hidden=av;$('#acAvulso').hidden=!av;return}
+  if(e.target.id==='nVinc'){const av=e.target.value==='avulso';$('#testeBox').hidden=!av;$('#nPrazoWrap').hidden=!av;$('#nAdavWrap').hidden=!av;$('#nAdmLbl').textContent=av?'Início do período de teste':'Data de admissão';$('#acBloco').hidden=av;$('#acAvulso').hidden=!av;return}
   const s=e.target.closest('[data-vinc]');
   if(s&&s.value){S.apelidos[s.dataset.vinc]=s.value;render();toast('Nome vinculado a '+OBRAS[s.value].nome+'.')}
 });
