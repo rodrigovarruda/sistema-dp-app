@@ -720,6 +720,7 @@ function calc(f){
 // ---------- Render ----------
 const $=s=>document.querySelector(s);
 function render(){
+  if(!NV.aplicando)NV.sujos=null; // redesenho por ação da própria pessoa: o digitado já foi usado ou descartado
   renderDemo();
   document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===S.tab));
   renderStatus();
@@ -3005,6 +3006,15 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ED)fecharEditor()})
 // envia as alterações e, quando outra pessoa salva, a tela se atualiza sozinha.
 const NUVEM={url:'https://ccducizropbzcuyrvirm.supabase.co',chave:'sb_publishable_6mi2_dgaQg086JMXfezZZg_CPYJPeGS',id:LS.includes('teste')?'teste':'piloto'};
 const nvDados=()=>{try{return localStorage.getItem(LS)||''}catch(e){return ''}};
+// o que a pessoa digitou e ainda não salvou (ex.: valor do Alelo ao fechar a quinzena, campos de um formulário aberto)
+// é guardado quando a alteração de outra pessoa redesenha a tela, e volta para o mesmo campo, com o cursor
+const campoChave=el=>el.id?'#'+CSS.escape(el.id):el.form&&el.form.id&&el.name?`#${CSS.escape(el.form.id)} [name="${el.name}"]`:null;
+document.addEventListener('input',e=>{const el=e.target;if(!el.closest||!el.closest('#view')||!el.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea'))return;
+  const k=campoChave(el);if(k)(NV.sujos=NV.sujos||new Map()).set(k,el.value)},true);
+function nvGuardarDigitado(){const a=document.activeElement,fk=a&&a.closest&&a.closest('#view')?campoChave(a):null;
+  return {vals:[...(NV.sujos||new Map())],fk,ss:fk&&a.selectionStart!=null?[a.selectionStart,a.selectionEnd]:null}}
+function nvVoltarDigitado(g){for(const [k,v] of g.vals){const el=document.querySelector(k);if(el)el.value=v}
+  if(g.fk){const el=document.querySelector(g.fk);if(el){el.focus();if(g.ss)try{el.setSelectionRange(g.ss[0],g.ss[1])}catch(e){}}}}
 const nvModalAberto=()=>!!ED||!!$('#modal').innerHTML.trim();
 const nomeDe=e=>{const n=String(e||'').split('@')[0].split(/[._-]/)[0];return n?n[0].toUpperCase()+n.slice(1):'?'};
 function nvSt(txt,cls){const el=$('#nuvemSt');if(el){el.textContent=txt;el.className='chip '+(cls||'')}}
@@ -3042,8 +3052,8 @@ function nvAplicar(row){
   NV.versao=row.versao;NV.depois=false;NV.bloq=false;
   try{localStorage.setItem(LS,row.dados)}catch(e){}
   // cada pessoa continua na empresa que estava vendo
-  const emp=S.empresa;NV.aplicando=true;
-  try{carregarLocal();if(emp){S.empresa=emp;$('#selEmp').value=emp}render()}finally{NV.aplicando=false}
+  const emp=S.empresa,dig=nvGuardarDigitado();NV.aplicando=true;
+  try{carregarLocal();if(emp){S.empresa=emp;$('#selEmp').value=emp}render();nvVoltarDigitado(dig)}finally{NV.aplicando=false}
   NV.ultimo=nvDados();NV.pendente=false;nvSt('✓ Salvo','ok');
 }
 async function nvChegou(){
