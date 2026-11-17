@@ -1654,7 +1654,7 @@ function renderCad(){
           <div id="formErr" class="err"></div>
           <div class="actions"><button class="btn primary" type="submit">Salvar mudança de vínculo</button><button class="btn" type="button" data-vinccancel="1">Cancelar</button></div></form>`;
       }
-      if(f.vinc==='avulso'){}
+      if(f.vinc==='avulso'&&!porPrazo(f)){}
       else if(S.cadEdit&&dp){
         h+=`<form id="acForm" class="cad-form"><h3 class="sub">Alterar acordo</h3>${acordoInputs(A)}
           <div class="form-grid"><div class="field"><label for="acDesde">Vale a partir de</label><select id="acDesde" name="desde">${proxComps().map(c=>`<option value="${c}">${compLabel(c)}</option>`).join('')}</select></div>
