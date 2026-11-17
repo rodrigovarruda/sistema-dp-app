@@ -1051,6 +1051,45 @@ function custoFunc(f,guia=0){
   if(!totM&&Object.values(it).some(x=>x>0)){out._sem={dias:0,diarias:0,...it}}
   return {out,est,estSal,sal:it.sal1+it.sal2};
 }
+// ---------- Custo por obra por forma de pagamento ----------
+// cada item do custo (custoFunc) vai para a forma em que foi pago, na mesma proporção por obra
+const FORMA_COLS=[['esp','Espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard'],['banco','Conta bancária'],['cesta','Cesta básica'],['guias','INSS/FGTS'],['def','A definir']];
+function custoForma(f,guia=0){
+  const c=custoFunc(f,guia),z=()=>({esp:0,alim:0,livre:0,natal:0,banco:0,cesta:0,guias:0,def:0});
+  // proporção de cada forma num fechamento do mês (benefícios): cartões guardados no fechamento, o resto em espécie
+  const deFech=fe=>{if(!fe)return null;const al=fe.alelo||{},a=+fe.aux||0;if(!(a>0))return null;const r={alim:(+al.alim||0)/a,livre:(+al.livre||0)/a,natal:(+al.natal||0)/a};r.esp=Math.max(0,1-r.alim-r.livre-r.natal);return r};
+  const contaEsp=/esp[eé]cie/i.test(f.conta||'');
+  const rq=q=>{if(porPrazo(f)){const x=S.qf[q]?.[f.id];if(!x)return {def:1};const b=brutoQ(x)||0,pa=alPartes(x);if(!(b>0))return {esp:1};return {alim:pa.alim/b,livre:pa.livre/b,esp:Math.max(0,1-(pa.alim+pa.livre)/b)}}return contaEsp?{esp:1}:{banco:1}};
+  const pv=S.comps?.[prevKey()]?.fechF?.[f.id],entrada=diaEntrada(f)&&f.adiantQuando;
+  const rBen=entrada?{esp:1}:(deFech(pv)||{def:1}),rBonif=deFech(S.fechF[f.id])||{def:1};
+  const R={diarias:{esp:1},sal1:rq(1),sal2:rq(2),insal:{banco:1},peric:{banco:1},bonif:rBonif,ajuda:rBen,cafe:rBen,alim:rBen,transp:rBen,cesta:{cesta:1},guias:{guias:1}};
+  const out={};
+  for(const [k,v] of Object.entries(c.out)){const o=out[k]=z();o.dias=v.dias;
+    for(const [item] of CUSTO_COLS){const val=+v[item]||0;if(!val)continue;for(const [fm,p] of Object.entries(R[item]||{def:1}))o[fm]+=val*p}}
+  return {out,est:c.est};
+}
+function renderCustoForma(fs,parte,nomeK){
+  const obras={};
+  for(const f of fs){const {out}=custoForma(f,parte[f.id]||0);
+    for(const [k,v] of Object.entries(out)){const o=obras[k]=obras[k]||{dias:0,func:[],tot:0};o.dias+=v.dias;let t=0;for(const [c2] of FORMA_COLS){o[c2]=(o[c2]||0)+v[c2];t+=v[c2]}o.tot+=t;o.func.push({f,v,t})}}
+  const lista=Object.entries(obras).sort((a,b)=>b[1].tot-a[1].tot),tot={dias:0,tot:0};
+  for(const [,o] of lista){tot.dias+=o.dias;tot.tot+=o.tot;for(const [c2] of FORMA_COLS)tot[c2]=(tot[c2]||0)+o[c2]}
+  const num=v=>Math.abs(v)>.004?nfmt2(v):'—',cols=lista.length?FORMA_COLS.filter(([c2])=>Math.abs(tot[c2]||0)>.004):FORMA_COLS;
+  let h=`<div class="scroller"><table class="ben custo"><thead><tr><th>Obra</th><th>Funcionários</th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
+  if(!lista.length)h+=`<tr><td colspan="${cols.length+4}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
+  for(const [k,o] of lista){
+    h+=`<tr class="row ${empCls(k)}-bar" data-custo="${esc(k)}" tabindex="0"><td><b>${esc(nomeK(k))}</b>${OBRAS[k]?` <span class="emp-chip ${empCls(k)}" style="font-size:10px;padding:1px 6px">${OBRAS[k].empresa}</span>`:''}</td><td>${o.func.length}</td><td>${nfmt(o.dias)}</td>${cols.map(([c2])=>`<td>${num(o[c2])}</td>`).join('')}<td><b>${nfmt2(o.tot)}</b></td></tr>`;
+    if(S.custoAberto===k)h+=`<tr><td colspan="${cols.length+4}" class="memo"><table class="ben custo"><thead><tr><th>Funcionário</th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+      ${o.func.sort((a,b)=>b.t-a.t).map(x=>`<tr><td>${esc(x.f.nome)}${selo(x.f)}${x.f.conta&&x.v.banco>.004?` <span class="hint">${esc(x.f.conta)}</span>`:''}</td><td>${nfmt(x.v.dias)}</td>${cols.map(([c2])=>`<td>${num(x.v[c2])}</td>`).join('')}<td><b>${nfmt2(x.t)}</b></td></tr>`).join('')}</tbody></table></td></tr>`;
+  }
+  h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${cols.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}<td>${nfmt2(tot.tot)}</td></tr></tfoot></table></div>
+    <div class="legend"><span>Os mesmos valores do custo por tipo, separados pela forma em que foram pagos, na proporção dos dias em cada obra.</span>
+    <span>Espécie: diárias de avulsos, parte em dinheiro do avulso por prazo e dos fechamentos, adiantamento de entrada, e salário de quem recebe pela conta "Espécie".</span>
+    <span>Alelo Alimentação, Alelo Saldo Livre e NatalCard: o que foi para cada cartão no fechamento do mês (benefícios) e, no avulso por prazo, ao fechar cada quinzena.</span>
+    <span>Conta bancária: salário da folha importada, pela conta escolhida do funcionário na aba Salários.</span>
+    <span>A definir: valores do custo ainda sem forma de pagamento (mês ainda não fechado, ou quinzena do avulso por prazo ainda aberta).</span></div>`;
+  return h;
+}
 function renderCusto(){
   const fs=visiveis(),obras={};let algumEst=false;
   // parte das guias de cada empresa, proporcional ao salário de cada funcionário dela
@@ -1068,7 +1107,9 @@ function renderCusto(){
   const num=v=>v?nfmt2(v):'—';
   // só as colunas com algum valor no mês aparecem (as vazias ficam escondidas para a tabela caber na tela)
   const cols=lista.length?CUSTO_COLS.filter(([c2])=>Math.abs(tot[c2]||0)>.004):CUSTO_COLS,ocultas=CUSTO_COLS.length-cols.length;
-  let h=`<section class="panel"><div class="panel-head"><h2>Custo por obra · ${nomeEmp()} · ${MES_NOME}</h2><span class="hint">Valores em R$. Clique numa obra para ver o custo por funcionário.${ocultas?` ${ocultas} coluna(s) sem valor no mês escondida(s).`:""}</span></div>
+  const ver=`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn${S.custoVer!=='forma'?' primary':''}" data-custover="tipo">Por tipo de custo</button><button class="btn${S.custoVer==='forma'?' primary':''}" data-custover="forma">Por forma de pagamento</button></span>`;
+  if(S.custoVer==='forma'){$('#view').innerHTML=`<section class="panel"><div class="panel-head"><h2>Custo por obra · ${nomeEmp()} · ${MES_NOME}</h2>${ver}<span class="hint">Valores em R$, pela forma em que foram pagos. Clique numa obra para ver por funcionário.</span></div>${renderCustoForma(fs,parte,nomeK)}</section>`;return}
+  let h=`<section class="panel"><div class="panel-head"><h2>Custo por obra · ${nomeEmp()} · ${MES_NOME}</h2>${ver}<span class="hint">Valores em R$. Clique numa obra para ver o custo por funcionário.${ocultas?` ${ocultas} coluna(s) sem valor no mês escondida(s).`:""}</span></div>
     <div class="scroller"><table class="ben custo"><thead><tr><th>Obra</th><th>Funcionários</th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
   if(!lista.length)h+=`<tr><td colspan="${cols.length+4}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
   for(const [k,o] of lista){
@@ -1078,9 +1119,8 @@ function renderCusto(){
   }
   h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${cols.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}<td>${nfmt2(tot.tot)}</td></tr></tfoot></table></div>
     <div class="legend"><span>Custo atribuído à obra onde o funcionário trabalhou, na proporção dos dias. Diárias vão direto para a obra do dia.</span>
-    <span>Salário: valor líquido pago em cada quinzena (aba Salários); no detalhe da obra aparecem o dia e a conta do pagamento. Sem valor informado, usa a estimativa (metade em cada quinzena): </span><span>mês completo = salário cheio; quem entrou no mês = salário ÷ 30 × dias desde o registro; menos salário ÷ 30 por falta (F); mais encargos da empresa (aba Empresas).</span>
-    <span>Insalubridade: só entra quando o salário é estimado, na obra com insalubridade cadastrada (aba Obras), proporcional aos dias na obra; se o acordo do funcionário tiver insalubridade, vale a do acordo, em qualquer obra. Com o salário líquido informado, ela já está dentro dele.</span>
-    <span>Periculosidade: % do salário no acordo do funcionário, rateada pelas obras como o salário; também só entra quando o salário é estimado.</span>
+    <span>Salário: só o valor real pago em cada quinzena: a folha importada (aba Salários; a 1ª quinzena entra com o adiantamento) e, no avulso por prazo, as quinzenas já pagas. Sem folha, não há estimativa. No detalhe da obra aparecem o dia e a conta do pagamento.</span>
+    <span>Insalubridade e periculosidade vêm dentro do salário da folha.</span>
     <span>Ajuda de custo, café, alimentação, passagens e cesta entram no mês a que se referem: vêm do fechamento de ${compLab(prevKey())} ou do registro deste mês.</span>
     ${algumEst?'<span><span class="tag">benefícios estimados</span> mês anterior ainda não fechado no sistema: valores tirados do acordo.</span>':''}${algumEstSal?'<span><span class="tag">salário estimado</span> preencha a aba Salários com o líquido pago.</span>':''}
     <span>Cesta básica pelo valor cadastrado na aba Empresas.</span><span>INSS/FGTS: guias informadas na aba Salários (opcional), divididas entre os funcionários da empresa pelo salário e depois pelas obras.</span></div></section>`;
@@ -2792,6 +2832,7 @@ $('#view').addEventListener('click',e=>{
     registrar(`Adiantamento auxílio-transporte · ${f.nome}`,'—',`${brl(a.total)} · ${a.lista} de ${dd(a.de)} a ${dd(NDIAS)}`,'Emitido (entrada no mês)');render();mostrarAdiant(f,'adiant');return}
   if(gcr){const f=byId(gcr.dataset.gerarcestareg);
     f.cestaReg={de:diaEntrada(f),comp:COMP};registrar(`Cesta básica · ${f.nome}`,'—',`Recibo referente a ${MES_NOME}`,'Emitido (cesta do registro)');render();mostrarAdiant(f,'cesta');return}
+  const cv=e.target.closest('[data-custover]');if(cv){S.custoVer=cv.dataset.custover;return render()}
   const cu=e.target.closest('[data-custo]');if(cu){S.custoAberto=S.custoAberto===cu.dataset.custo?null:cu.dataset.custo;return render()}
   const vcr=e.target.closest('[data-vercestareg]');if(vcr)return mostrarAdiant(byId(vcr.dataset.vercestareg),'cesta');
   const vc=e.target.closest('[data-vercesta]');if(vc)return emitirCesta([vc.dataset.vercesta]);
