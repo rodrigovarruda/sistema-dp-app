@@ -789,8 +789,8 @@ function renderSalarios(){
       const avEsp=(q,modo='esp')=>{const pd={},ab={v:0,ls:[]},add=(o,f,v,o2)=>{o.v+=v;o.ls.push({f,v,o:o2})},qn=q==='q1'?1:2;
         for(const f of visiveis()){if(empresaDe(f)!==e||!temAvulso(f))continue;
           const x=S.qf[qn]?.[f.id];
-          if(x){const al=+x.alelo||0,v=modo!=='esp'?((x.aleloTipo||'livre')===modo?al:0):r2((+x.valor||0)-al),d=String(x.quando||'').split(' ')[0];if(v>0)add(pd[d]=pd[d]||{v:0,ls:[]},f,v,x.prazo?'salário':'diárias')}
-          else{const vq=valorQ(f,qn),al=aleloSug(f,qn,vq),v=modo!=='esp'?(aleloTipo(f)===modo?al:0):r2(vq.valor-al);if(v>0)add(ab,f,v,'')}
+          if(x){const pa=alPartes(x),v=modo!=='esp'?pa[modo]:r2((+x.valor||0)-pa.alim-pa.livre),d=String(x.quando||'').split(' ')[0];if(v>0)add(pd[d]=pd[d]||{v:0,ls:[]},f,v,x.prazo?'salário':'diárias')}
+          else{const vq=valorQ(f,qn),sg=aleloSug(f,qn,vq),v=modo!=='esp'?sg[modo]:r2(vq.valor-sg.alim-sg.livre);if(v>0)add(ab,f,v,'')}
           const a=f.adiantAv;if(modo==='esp'&&a&&a.comp===COMP&&((lerData(a.data)?.getDate()||1)<=15)===(q==='q1'))add(pd[a.data]=pd[a.data]||{v:0,ls:[]},f,a.valor,'adiantamento')}
         const nomes=ls=>`<span class="esp-nomes">${ls.sort((a,b)=>a.f.nome.localeCompare(b.f.nome,'pt-BR')).map(x=>`<span><button class="link-btn" data-abrirfunc="${x.f.id}">${esc(x.f.nome)}</button> <b class="num">${brl(x.v)}</b>${x.o&&x.o!=='diárias'?` <span class="hint">(${x.o})</span>`:''}</span>`).join('')}</span>`;
         return Object.keys(pd).sort((a,b)=>lerData(a)-lerData(b)).map(d=>`<span class="conta-outra"><b class="num">${brl(r2(pd[d].v))}</b> <span class="hint">pago em ${esc(d)} · ${pd[d].ls.length} avulso(s)</span></span>${nomes(pd[d].ls)}`).join('')
@@ -977,7 +977,7 @@ function pagamentosDe(f){
   const fe=S.fechF[f.id],a=calcAdiant(f),r={adi:0,dia:0,auxEsp:0,alim:0,livre:0,natal:0,cesta:0};
   if(a&&a.total>0&&f.adiantQuando&&comoMens(f))r.adi=a.total;
   if(f.adiantAv?.comp===COMP)r.adi+=f.adiantAv.valor;
-  for(const q of [1,2]){const x=S.qf[q]?.[f.id];if(!x)continue;const al=+x.alelo||0;r.dia+=(+x.valor||0)-al;r[x.aleloTipo==='alim'?'alim':'livre']+=al}
+  for(const q of [1,2]){const x=S.qf[q]?.[f.id];if(!x)continue;const pa=alPartes(x);r.dia+=(+x.valor||0)-pa.alim-pa.livre;r.alim+=pa.alim;r.livre+=pa.livre}
   if(fe){r.alim=+fe.alelo?.alim||0;r.livre=+fe.alelo?.livre||0;r.natal=+fe.alelo?.natal||0;
     r.auxEsp=Math.max(0,fe.especie!=null?+fe.especie:(+fe.aux||0)-aleloSoma(fe.alelo));
     if(fe.cesta)r.cesta+=fe.cestaValor!=null?+fe.cestaValor:valorCesta(f)}
@@ -1651,7 +1651,7 @@ function renderCad(){
        <div class="ac-cards"><div class="ac-card${salPrazoMes(f)?'':' off'}"><span class="hint">${salPrazoOrig(f)==='tabela'?'Salário de '+esc(f.funcao):'Salário combinado'}</span><b class="num">${salPrazoMes(f)?brl(salPrazoMes(f)):'Não cadastrado'}</b><span class="hint">por mês · ${{acordo:'do acordo dele (Alterar acordo)',ficha:'combinado na ficha',tabela:'tabela da aba Funções; para outro valor, use o salário do acordo'}[salPrazoOrig(f)]}</span></div>
        <div class="ac-card"><span class="hint">1ª quinzena</span><b>40%</b><span class="hint">2ª quinzena: o restante, com as faltas descontadas</span></div>
        ${+f.descMensal?.valor?`<div class="ac-card"><span class="hint">${esc(f.descMensal.motivo)}</span><b class="num">− ${brl(+f.descMensal.valor)}</b><span class="hint">por mês, na 2ª quinzena</span></div>`:''}</div>
-       <p style="margin:0 0 6px">${dp?`<label class="ac-chk" style="font-weight:500"><input type="checkbox" data-pagaalelo="${f.id}" ${f.pagaAlelo?'checked':''}> Recebe tudo no cartão Alelo</label> · cartão <select data-aletipo="${f.id}" aria-label="Cartão Alelo de ${esc(f.nome)}"><option value="livre" ${aleloTipo(f)==='livre'?'selected':''}>Alelo Saldo Livre</option><option value="alim" ${aleloTipo(f)==='alim'?'selected':''}>Alelo Alimentação</option></select> <span class="hint">(ao fechar a quinzena, o valor inteiro já vem no Alelo; desmarcado: espécie, ou parte no Alelo digitada na hora)</span>`:`<span class="hint">Forma de pagamento: ${f.pagaAlelo?ALELO_NOME[aleloTipo(f)]:'espécie'}</span>`}</p>
+       <p style="margin:0 0 6px">${dp?`<label class="ac-chk" style="font-weight:500"><input type="checkbox" data-pagaalelo="${f.id}" ${f.pagaAlelo?'checked':''}> Não recebe nada em espécie</label> <span class="hint">(ao fechar cada quinzena, digite quanto vai no Alelo Alimentação; o restante já vem no Alelo Saldo Livre. Desmarcado: o que não for para os cartões sai em espécie. Os valores da última quinzena vêm sugeridos.)</span>`:`<span class="hint">Forma de pagamento: ${f.pagaAlelo?'só cartões Alelo':'espécie e/ou cartões Alelo'}</span>`}</p>
        ${dp&&S.salpEdit!==f.id?`<p style="margin:0 0 6px"><button class="btn" data-salpedit="${f.id}">Desconto mensal</button> <span class="hint">desconto fixo na 2ª quinzena (ex.: parcela do carro). O salário próprio dele vai no acordo (Alterar acordo → Salário mensal). O Alelo é digitado ao fechar cada quinzena.</span></p>`:''}
        ${dp&&S.salpEdit===f.id?`<form id="salpForm" class="cad-form"><h3 class="sub" style="margin-top:0">Desconto mensal de ${esc(f.nome)}</h3><div class="form-grid">
          ${salPrazoOrig(f)==='ficha'?`<div class="field"><label for="spSal">Salário combinado na ficha (R$)</label><input type="text" id="spSal" name="sal" inputmode="decimal" value="${nfmt2(+f.salProprio)}" placeholder="apague para usar o acordo ou a tabela"></div>`:''}
@@ -2445,19 +2445,24 @@ function recibosFicha(f){
 }
 // fecha a quinzena de um avulso: grava diárias, desconto do adiantamento e valor pago
 // parte paga no cartão Alelo (avulso por prazo): digitada ao fechar a quinzena; o resto sai em espécie
-const aleloQIn=(q,id)=>{const el=document.getElementById(`qal-${q}-${id}`);return el?(el.value.trim()?parseBRL(el.value):0):0};
-function aleloQErro(q,ids){for(const id of ids){const a=aleloQIn(q,id),f=byId(id);if(!(a>=0))return `Valor do Alelo inválido para ${f.nome}.`;if(a>valorQ(f,q).valor+.001)return `O Alelo de ${f.nome} (${brl(a)}) passa do valor a pagar (${brl(valorQ(f,q).valor)}).`}return ''}
-// Alelo sugerido ao fechar: tudo, para quem recebe só no cartão (f.pagaAlelo); senão, o valor usado da última vez
-const aleloSug=(f,q,v)=>!porPrazo(f)?0:f.pagaAlelo?v.valor:f.aleloUlt?.[q]!=null?Math.min(f.aleloUlt[q],v.valor):0;
-const aleloCampo=(f,q,v)=>porPrazo(f)&&!S.qf[q]?.[f.id]&&S.perfil==='dp'?`<label class="ac-chk" style="font-weight:500;white-space:nowrap">No ${ALELO_NOME[aleloTipo(f)]} R$ <input type="text" inputmode="decimal" id="qal-${q}-${f.id}" value="${aleloSug(f,q,v)?nfmt2(aleloSug(f,q,v)):''}" placeholder="0,00" style="width:96px"></label>`:'';
-// cartão do avulso por prazo: Alelo Saldo Livre (padrão) ou Alelo Alimentação
+// cada quinzena do avulso por prazo pode sair parte no Alelo Alimentação, parte no Alelo Saldo Livre e o resto em espécie
 const ALELO_NOME={alim:'Alelo Alimentação',livre:'Alelo Saldo Livre'},aleloTipo=f=>f.aleloTipo==='alim'?'alim':'livre';
-const formaQ=x=>x&&+x.alelo?`${ALELO_NOME[x.aleloTipo==='alim'?'alim':'livre']} ${brl(x.alelo)} · espécie ${brl(r2(x.valor-x.alelo))}`:'';
+// partes de uma quinzena fechada (as fechadas antes da divisão guardavam um valor só, com aleloTipo)
+const alPartes=x=>{if(!x)return {alim:0,livre:0};if('aleloAlim' in x||'aleloLivre' in x)return {alim:+x.aleloAlim||0,livre:+x.aleloLivre||0};const a=+x.alelo||0;return x.aleloTipo==='alim'?{alim:a,livre:0}:{alim:0,livre:a}};
+const aleloQIn=(q,id)=>{const g=t=>{const el=document.getElementById(`qal-${q}-${id}-${t}`);return el&&el.value.trim()?parseBRL(el.value):0};return {alim:g('alim'),livre:g('livre')}};
+function aleloQErro(q,ids){for(const id of ids){const a=aleloQIn(q,id),f=byId(id),v=valorQ(f,q).valor;if(!(a.alim>=0)||!(a.livre>=0))return `Valor do Alelo inválido para ${f.nome}.`;if(a.alim+a.livre>v+.001)return `O Alelo de ${f.nome} (${brl(r2(a.alim+a.livre))}) passa do valor a pagar (${brl(v)}).`}return ''}
+// sugerido ao fechar: o que foi usado da última vez em cada cartão; quem recebe tudo no cartão (f.pagaAlelo) tem o restante no Saldo Livre
+function aleloSug(f,q,v){if(!porPrazo(f))return {alim:0,livre:0};let u=f.aleloUlt?.[q];if(typeof u==='number')u=aleloTipo(f)==='alim'?{alim:u}:{livre:u};u=u||{};
+  const alim=r2(Math.min(+u.alim||0,v.valor)),livre=f.pagaAlelo?r2(v.valor-alim):r2(Math.min(+u.livre||0,v.valor-alim));return {alim,livre}}
+const aleloCampo=(f,q,v)=>{if(!porPrazo(f)||S.qf[q]?.[f.id]||S.perfil!=='dp')return '';const s=aleloSug(f,q,v),inp=t=>`<label class="ac-chk" style="font-weight:500;white-space:nowrap">${ALELO_NOME[t]} R$ <input type="text" inputmode="decimal" id="qal-${q}-${f.id}-${t}" value="${s[t]?nfmt2(s[t]):''}" placeholder="0,00" style="width:90px"></label>`;
+  return `<span style="display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px">${inp('alim')}${inp('livre')}<span class="hint">o resto sai em espécie</span></span>`};
+const formaQ=x=>{if(!x)return '';const p=alPartes(x),al=p.alim+p.livre;if(!al)return '';return [p.alim?`Alelo Alimentação ${brl(p.alim)}`:'',p.livre?`Alelo Saldo Livre ${brl(p.livre)}`:'',x.valor-al>.004?`espécie ${brl(r2(x.valor-al))}`:''].filter(Boolean).join(' · ')};
 function gravarQ(q,id,qd){
-  const f=byId(id),v=valorQ(f,q),k=q+':'+id,al=porPrazo(f)?r2(Math.min(aleloQIn(q,id)||0,v.valor)):0;S.qver[k]=(S.qver[k]||0)+1;S.qf[q][id]={...v,alelo:al,...(al?{aleloTipo:aleloTipo(f)}:{}),quando:qd,versao:S.qver[k]};
-  if(porPrazo(f))f.aleloUlt={...(f.aleloUlt||{}),[q]:al};
+  const f=byId(id),v=valorQ(f,q),k=q+':'+id,pi=porPrazo(f)?aleloQIn(q,id):{alim:0,livre:0},aA=r2(Math.min(pi.alim,v.valor)),aL=r2(Math.min(pi.livre,v.valor-aA)),al=r2(aA+aL);
+  S.qver[k]=(S.qver[k]||0)+1;S.qf[q][id]={...v,alelo:al,aleloAlim:aA,aleloLivre:aL,quando:qd,versao:S.qver[k]};
+  if(porPrazo(f))f.aleloUlt={...(f.aleloUlt||{}),[q]:{alim:aA,livre:aL}};
   if(v.desc&&f.adiantAv){const a=f.adiantAv;a.desc=(a.desc||[]).filter(x=>!(x.comp===COMP&&x.q===q));a.desc.push({comp:COMP,q,valor:v.desc})}
-  registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Aberta',`Fechada · ${v.prazo?'salário':nfmt(v.n)+' diária(s)'} · ${brl(v.bruto)}${v.desc?` − adiantamento ${brl(v.desc)}`:''}${v.emp?` − ${v.prazo.descMot} ${brl(v.emp)}`:''} = ${brl(v.valor)}${al?` (Alelo ${brl(al)}, espécie ${brl(r2(v.valor-al))})`:''}`,'Fechamento da quinzena');
+  registrar(`Diárias · ${QZ[q].nome} · ${f.nome}`,'Aberta',`Fechada · ${v.prazo?'salário':nfmt(v.n)+' diária(s)'} · ${brl(v.bruto)}${v.desc?` − adiantamento ${brl(v.desc)}`:''}${v.emp?` − ${v.prazo.descMot} ${brl(v.emp)}`:''} = ${brl(v.valor)}${al?` (${formaQ(S.qf[q][id])})`:''}`,'Fechamento da quinzena');
 }
 function reabrirQ(q,f,m){
   q=+q;delete S.qf[q][f.id];
