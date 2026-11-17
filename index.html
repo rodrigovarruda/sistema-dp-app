@@ -1629,12 +1629,12 @@ function renderCad(){
          ${dp&&S.prazoEdit===f.id?`<form id="prazoForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="pAte">Avulso por prazo, sem período de teste, até:</label><input type="text" id="pAte" name="ate" data-date="1" inputmode="numeric" value="${esc(f.avulsoPrazo?.ate||maisMeses(f.adm,6))}" placeholder="DD/MM/AAAA"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar prazo</button><button class="btn" type="button" data-prazoedit="">Cancelar</button></div></form>`:''}</div>`:''}
        ${recibosFicha(f)}
        ${porPrazo(f)?`<h3 class="sub">Pagamento do avulso por prazo</h3>
-       <div class="ac-cards"><div class="ac-card${+f.salProprio||SALFUN[f.funcao]?'':' off'}"><span class="hint">${+f.salProprio?'Salário combinado':'Salário de '+esc(f.funcao)}</span><b class="num">${+f.salProprio?brl(+f.salProprio):SALFUN[f.funcao]?brl(SALFUN[f.funcao]):'Não cadastrado'}</b><span class="hint">por mês · ${+f.salProprio?'valor próprio dele':'tabela da aba Funções'}</span></div>
+       <div class="ac-cards"><div class="ac-card${salPrazoMes(f)?'':' off'}"><span class="hint">${salPrazoOrig(f)==='tabela'?'Salário de '+esc(f.funcao):'Salário combinado'}</span><b class="num">${salPrazoMes(f)?brl(salPrazoMes(f)):'Não cadastrado'}</b><span class="hint">por mês · ${{acordo:'do acordo dele (Alterar acordo)',ficha:'combinado na ficha',tabela:'tabela da aba Funções; para outro valor, use o salário do acordo'}[salPrazoOrig(f)]}</span></div>
        <div class="ac-card"><span class="hint">1ª quinzena</span><b>40%</b><span class="hint">2ª quinzena: o restante, com as faltas descontadas</span></div>
        ${+f.descMensal?.valor?`<div class="ac-card"><span class="hint">${esc(f.descMensal.motivo)}</span><b class="num">− ${brl(+f.descMensal.valor)}</b><span class="hint">por mês, na 2ª quinzena</span></div>`:''}</div>
-       ${dp&&S.salpEdit!==f.id?`<p style="margin:0 0 6px"><button class="btn" data-salpedit="${f.id}">Salário e desconto do mês</button> <span class="hint">salário próprio dele e desconto fixo (ex.: parcela do carro). O Alelo é digitado ao fechar cada quinzena.</span></p>`:''}
-       ${dp&&S.salpEdit===f.id?`<form id="salpForm" class="cad-form"><h3 class="sub" style="margin-top:0">Salário e desconto de ${esc(f.nome)}</h3><div class="form-grid">
-         <div class="field"><label for="spSal">Salário mensal combinado (R$)</label><input type="text" id="spSal" name="sal" inputmode="decimal" value="${+f.salProprio?nfmt2(+f.salProprio):''}" placeholder="vazio = tabela (${SALFUN[f.funcao]?brl(SALFUN[f.funcao]):'não cadastrado'})"></div>
+       ${dp&&S.salpEdit!==f.id?`<p style="margin:0 0 6px"><button class="btn" data-salpedit="${f.id}">Desconto mensal</button> <span class="hint">desconto fixo na 2ª quinzena (ex.: parcela do carro). O salário próprio dele vai no acordo (Alterar acordo → Salário mensal). O Alelo é digitado ao fechar cada quinzena.</span></p>`:''}
+       ${dp&&S.salpEdit===f.id?`<form id="salpForm" class="cad-form"><h3 class="sub" style="margin-top:0">Desconto mensal de ${esc(f.nome)}</h3><div class="form-grid">
+         ${salPrazoOrig(f)==='ficha'?`<div class="field"><label for="spSal">Salário combinado na ficha (R$)</label><input type="text" id="spSal" name="sal" inputmode="decimal" value="${nfmt2(+f.salProprio)}" placeholder="apague para usar o acordo ou a tabela"></div>`:''}
          <div class="field"><label for="spDesc">Desconto mensal na 2ª quinzena (R$)</label><input type="text" id="spDesc" name="desc" inputmode="decimal" value="${+f.descMensal?.valor?nfmt2(+f.descMensal.valor):''}" placeholder="0,00"></div>
          <div class="field"><label for="spMot">Descrição do desconto</label><input type="text" id="spMot" name="mot" value="${esc(f.descMensal?.motivo||'')}" placeholder="Ex.: Parcela do carro"></div></div>
          <p class="hint" style="margin:0">Vale para as quinzenas ainda abertas. Quinzenas já fechadas não mudam.</p>
@@ -1978,15 +1978,15 @@ $('#view').addEventListener('submit',e=>{
   }
   if(fm.id==='salpForm'){
     const f=byId(S.cadSel);if(!f)return;
-    const sal=fm.sal.value.trim()?parseBRL(fm.sal.value):0,desc=fm.desc.value.trim()?parseBRL(fm.desc.value):0,mot=fm.mot.value.trim();
-    if(fm.sal.value.trim()&&!(sal>0))return err('Salário inválido (ex.: 2.500,00).');
+    const sv=fm.sal?fm.sal.value.trim():'',sal=sv?parseBRL(sv):0,desc=fm.desc.value.trim()?parseBRL(fm.desc.value):0,mot=fm.mot.value.trim();
+    if(sv&&!(sal>0))return err('Salário inválido (ex.: 2.500,00).');
     if(fm.desc.value.trim()&&!(desc>=0))return err('Desconto inválido (ex.: 300,00).');
     if(desc>0&&mot.length<3)return err('Escreva a descrição do desconto (ex.: Parcela do carro).');
     const antes=`salário ${+f.salProprio?brl(+f.salProprio):'da tabela'}${+f.descMensal?.valor?` · ${f.descMensal.motivo} ${brl(+f.descMensal.valor)}`:''}`;
-    if(sal)f.salProprio=sal;else delete f.salProprio;
+    if(fm.sal){if(sal)f.salProprio=sal;else delete f.salProprio}
     if(desc>0)f.descMensal={valor:desc,motivo:mot};else delete f.descMensal;
-    registrar(`Avulso por prazo · ${f.nome}`,antes,`salário ${sal?brl(sal):'da tabela'}${desc>0?` · ${mot} ${brl(desc)}`:''}`,'Salário e desconto do mês');
-    S.salpEdit=null;render();return toast(`Salário e desconto de ${f.nome} salvos.`);
+    registrar(`Avulso por prazo · ${f.nome}`,antes,`salário ${+f.salProprio?brl(+f.salProprio):'do acordo/tabela'}${desc>0?` · ${mot} ${brl(desc)}`:''}`,'Desconto mensal');
+    S.salpEdit=null;render();return toast(`Desconto mensal de ${f.nome} salvo.`);
   }
   if(fm.id==='adavForm'){
     const f=byId(S.cadSel),valor=parseBRL(fm.valor.value),data=fm.data.value.trim(),d=lerData(data);
@@ -2338,14 +2338,16 @@ function linhasQ(f,u,q){
   if(u.emp)L.push([`(−) ${esc(s?.descMot||'Desconto mensal')}`,'desconto mensal combinado',-u.emp]);
   return L;
 }
+const salPrazoOrig=f=>+acordo(f)?.salario?'acordo':+f.salProprio?'ficha':'tabela';
+const salPrazoMes=f=>{const o=salPrazoOrig(f);return o==='acordo'?+acordo(f).salario:o==='ficha'?+f.salProprio:+SALFUN[f.funcao]||0};
 function salPrazo(f){
-  // salário próprio combinado com o funcionário (f.salProprio) vale no lugar da tabela da função
-  const M=+f.salProprio||+SALFUN[f.funcao]||0,ini=admDia(f),fim=saidaDia(f)||NDIAS,p=S.ponto[f.id]||{};
+  // salário do acordo (ou o combinado antes na ficha, f.salProprio) vale no lugar da tabela da função
+  const M=salPrazoMes(f),ini=admDia(f),fim=saidaDia(f)||NDIAS,p=S.ponto[f.id]||{};
   let du=0,faltas=0;
   for(let d=1;d<=NDIAS;d++)if(obrig(d)&&d>=ini&&d<=fim){du++;if(p[d]&&(p[d].c==='F'||p[d].c==='SU'))faltas++}
   const DU=DU_AGO||1,base=r2(M*du/DU),descF=r2(M/DU*faltas),total=Math.max(0,r2(base-descF));
   const fe1=S.qf[1]?.[f.id],q1=fe1?brutoQ(fe1):(ini<=15?r2(base*.4):0);
-  return {M,du,DU,faltas,base,descF,total,q1,q2:Math.max(0,r2(total-q1)),semSal:!M,proprio:!!+f.salProprio,
+  return {M,du,DU,faltas,base,descF,total,q1,q2:Math.max(0,r2(total-q1)),semSal:!M,proprio:salPrazoOrig(f)!=='tabela',
     descEmp:+f.descMensal?.valor||0,descMot:f.descMensal?.motivo||'Desconto mensal'};
 }
 // Adiantamento para despesas do avulso (f.adiantAv={valor,data,comp,quando,desc:[{comp,q,valor}]}):
