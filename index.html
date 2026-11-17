@@ -552,7 +552,15 @@ function historico(f){
   const ev=[{data:f.adm,txt:`${f.contrat.vinc==='avulso'?'Início do período de teste na':'Admitido na'} <b>${esc(f.contrat.empresa)}</b> como ${esc(f.contrat.funcao)} (${f.contrat.vinc==='avulso'?'avulso':'mensalista'}), contratado para a obra <b>${esc(OBRAS[f.contrat.obra].nome)}</b>`}];
   if(f.lot[0].obra!==f.contrat.obra)ev.push({data:`antes de ${MM}/${ANO}`,txt:`Lotação passou para <b>${esc(OBRAS[f.lot[0].obra].nome)}</b>`});
   f.lot.slice(1).forEach(l=>ev.push({de:l.de,data:`${dd(l.de)}/${ANO}`,txt:`Transferido para <b>${esc(OBRAS[l.obra].nome)}</b>`}));
-  f.vh.slice(1).forEach(x=>ev.push({de:x.de,data:`${dd(x.de)}/${ANO}`,txt:x.vinc==='mensalista'?'<b>Admissão</b>: registrado como mensalista (fim do período de teste)':'Passou a trabalhar como <b>avulso</b>'}));
+  // mudança de vínculo no mês: o DP pode corrigir a data (S.vhEdit = "id:índice")
+  const dpH=S.perfil==='dp';
+  f.vh.slice(1).forEach((x,j)=>{const i=j+1,ed=S.vhEdit===`${f.id}:${i}`;
+    ev.push({de:x.de,data:`${dd(x.de)}/${ANO}`,txt:(x.vinc==='mensalista'?'<b>Admissão</b>: registrado como mensalista (fim do período de teste)':`Passou a trabalhar como <b>avulso</b>${porPrazo(f)&&i===f.vh.length-1?' por prazo':''}`)
+      +(dpH&&!ed?` <button class="link-btn" data-vhedit="${f.id}:${i}">Corrigir data</button>`:'')
+      +(dpH&&ed?(()=>{const ant=f.vh[i-1].de,prox=f.vh[i+1]?.de||NDIAS+1;
+        return `<form id="vhForm" class="cad-form" data-f="${f.id}" data-i="${i}" style="margin:6px 0 0"><div class="form-grid"><div class="field"><label for="vhDe">Dia certo da mudança</label><select id="vhDe" name="de">${Array.from({length:NDIAS},(_,k)=>k+1).filter(d=>d>ant&&d<prox).map(d=>`<option value="${d}" ${d===x.de?'selected':''}>${dd(d)}/${ANO} (${WD_LONG[dow(d)]})</option>`).join('')}</select></div>
+          <div class="field"><label for="vhMot">Motivo (obrigatório)</label><input type="text" id="vhMot" name="motivo" placeholder="Ex.: data lançada errada"></div></div>
+          <div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar data</button><button class="btn" type="button" data-vhedit="">Cancelar</button></div></form>`})():'')})});
   ev.sort((a,b)=>(a.de??0)-(b.de??0));
   {const a=calcAdiant(f);if(a&&a.total>0&&f.adiantQuando&&comoMens(f))ev.push({data:`${dd(a.de)}/${ANO}`,txt:`Adiantamento auxílio-transporte: ${a.lista} até ${dd(NDIAS)} · ${brl(a.total)}`})}
   f.acordos.slice(1).forEach(a=>ev.push({data:compLabel(a.desde),txt:`Acordo alterado · ${esc(a.motivo)}`}));
@@ -2074,6 +2082,20 @@ $('#view').addEventListener('submit',e=>{
     registrar(`Avulso por prazo · ${f.nome}`,antes,`salário ${+f.salProprio?brl(+f.salProprio):'do acordo/tabela'}${desc>0?` · ${mot} ${brl(desc)}`:''}`,'Desconto mensal');
     S.salpEdit=null;render();return toast(`Desconto mensal de ${f.nome} salvo.`);
   }
+  if(fm.id==='vhForm'){
+    const f=byId(fm.dataset.f),i=+fm.dataset.i,x=f?.vh[i];if(!x)return;
+    const de=+fm.de.value,motivo=fm.motivo.value.trim(),antes=x.de;
+    if(motivo.length<4)return err('Escreva o motivo da correção.');
+    if(de===antes){S.vhEdit=null;return render()}
+    // quinzenas afetadas (entre a data antiga e a nova) não podem estar fechadas, nem o mês do funcionário
+    const qs=[...new Set([qDe(Math.min(de,antes)),qDe(Math.max(de,antes)-1)])];
+    const fechadas=qs.filter(q=>S.qf[q]?.[f.id]);
+    if(fechadas.length)return err(`A ${fechadas.map(q=>QZ[q].nome).join(' e a ')} de ${f.nome} já foi fechada. Reabra a quinzena (aba Fechamento) antes de corrigir a data.`);
+    if(S.fechF[f.id])return err(`O mês de ${f.nome} já foi fechado. Reabra o fechamento antes de corrigir a data.`);
+    x.de=de;if(x.vinc==='mensalista'&&f.admissao===`${dd(antes)}/${ANO}`)f.admissao=`${dd(de)}/${ANO}`;
+    registrar(`Vínculo · ${f.nome}`,`${x.vinc==='mensalista'?'Mensalista':'Avulso'} desde ${dd(antes)}/${ANO}`,`${x.vinc==='mensalista'?'Mensalista':'Avulso'} desde ${dd(de)}/${ANO}`,motivo);
+    S.vhEdit=null;render();return toast(`Data corrigida: ${x.vinc==='mensalista'?'mensalista':'avulso'} desde ${dd(de)}/${ANO}. Os valores das quinzenas foram recalculados.`);
+  }
   if(fm.id==='adavForm'){
     const f=byId(S.cadSel),valor=parseBRL(fm.valor.value),data=fm.data.value.trim(),d=lerData(data);
     if(!f||f.vinc!=='avulso')return;
@@ -2914,6 +2936,8 @@ $('#view').addEventListener('click',e=>{
   const af=e.target.closest('[data-abrirfunc]');
   if(af){const f=byId(af.dataset.abrirfunc);if(!f)return;if(!ativoNoMes(f))S.verDeslig=true;if(!TODAS()&&S.empresa!==empresaDe(f)){S.empresa=empresaDe(f);$('#selEmp').value=S.empresa}
     S.tab='funcionarios';S.cadSel=f.id;S.cadEdit=false;render();$('.cad-main')?.scrollIntoView({block:'start'});return}
+  const vhe=e.target.closest('[data-vhedit]');
+  if(vhe){S.vhEdit=vhe.dataset.vhedit||null;render();if(S.vhEdit)$('#vhForm')?.scrollIntoView({block:'center'});return}
   const spe=e.target.closest('[data-salpedit]');
   if(spe){S.salpEdit=spe.dataset.salpedit||null;render();if(S.salpEdit)$('#salpForm')?.scrollIntoView({block:'center'});return}
   const ae=e.target.closest('[data-adavedit]');
