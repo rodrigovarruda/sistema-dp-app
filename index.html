@@ -514,7 +514,7 @@ const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','
 const compLabel=c=>MESES[+c.slice(5)-1]+'/'+c.slice(0,4);
 const DIARIAS={'Pedreiro':130,'Armador':130,'Servente':100,'Carpinteiro':150,'Aux. de pedreiro':110,'Aux. de carpinteiro':110,'Aux. de armador':110,'Motorista':130};
 const DIARIAS_HIST={};for(const n in DIARIAS)DIARIAS_HIST[n]=[{desde:'2026-01',valor:DIARIAS[n],motivo:'Tabela inicial'}];
-// salário mensal da função: é o que recebe o avulso por prazo (40% na 1ª quinzena, o restante na 2ª)
+// salário mensal da função: é o que recebe o avulso por prazo (40% na 1ª quinzena, ou 50% se escolhido; o restante na 2ª)
 const SALFUN={'Pedreiro':1949.15};
 const VERBAS=[['bonif','Bonificação','por mês'],['ajuda','Ajuda de custo','por mês'],['cafe','Auxílio café','por mês'],['alim','Alimentação','por mês'],['tarifa','Passagem (tarifa de uma viagem)','ida; o sistema paga ida e volta']];
 ALL.forEach(f=>{f.acordos=[{desde:'2026-01',ben:{...f.ben},tarifa:f.tarifa,motivo:'Acordo da admissão',quem:'DP'}]});
@@ -1704,13 +1704,13 @@ function renderCad(){
   return `<div class="${lim?'teste-alerta':'teste-info'}"><b>${lim?(n>LIMITE_TESTE?'⚠ Limite do período de teste ultrapassado':'⚠ Limite do período de teste atingido'):'Período de teste'}: ${nfmt(n)} de ${LIMITE_TESTE} dias trabalhados.</b>
     <span>${lim?`${esc(f.nome)} deve ser registrado antes de continuar trabalhando.`:`Faltam ${nfmt(LIMITE_TESTE-n)} dia(s). Depois disso, registre o funcionário como mensalista.`}</span>
     ${lim&&S.perfil==='dp'?`<button class="btn primary" data-govinc="${f.id}">Registrar como mensalista</button>`:''}</div>`})()}
-       ${f.vinc==='avulso'&&!f.saida&&(dp||f.avulsoPrazo)?`<div class="teste-info" id="prazoFicha">${f.avulsoPrazo?`<b>Avulso por prazo até ${esc(f.avulsoPrazo.ate)}</b><span>Sem período de teste. Não recebe diária: recebe o salário da função (40% na 1ª quinzena e o restante na 2ª) e os benefícios do acordo, como mensalista. No fim do prazo, registre como mensalista ou dispense.</span>`:`<span>Se ele vai ficar como avulso por um tempo combinado (ex.: 6 meses), sem período de teste, marque aqui.</span>`}
+       ${f.vinc==='avulso'&&!f.saida&&(dp||f.avulsoPrazo)?`<div class="teste-info" id="prazoFicha">${f.avulsoPrazo?`<b>Avulso por prazo até ${esc(f.avulsoPrazo.ate)}</b><span>Sem período de teste. Não recebe diária: recebe o salário (${pctTxt(f)} na 1ª quinzena e o restante na 2ª) e os benefícios do acordo, como mensalista. No fim do prazo, registre como mensalista ou dispense.</span>`:`<span>Se ele vai ficar como avulso por um tempo combinado (ex.: 6 meses), sem período de teste, marque aqui.</span>`}
          ${dp&&S.prazoEdit!==f.id?`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-prazoedit="${f.id}">${f.avulsoPrazo?'Mudar o prazo':'Avulso por prazo'}</button>${f.avulsoPrazo?`<button class="btn" data-prazotirar="${f.id}">Tirar o prazo (volta ao período de teste)</button>`:''}</span>`:''}
          ${dp&&S.prazoEdit===f.id?`<form id="prazoForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="pAte">Avulso por prazo, sem período de teste, até:</label><input type="text" id="pAte" name="ate" data-date="1" inputmode="numeric" value="${esc(f.avulsoPrazo?.ate||maisMeses(f.adm,6))}" placeholder="DD/MM/AAAA"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar prazo</button><button class="btn" type="button" data-prazoedit="">Cancelar</button></div></form>`:''}</div>`:''}
        ${recibosFicha(f)}
        ${porPrazo(f)?`<h3 class="sub">Pagamento do avulso por prazo</h3>
        <div class="ac-cards"><div class="ac-card${salPrazoMes(f)?'':' off'}"><span class="hint">${salPrazoOrig(f)==='tabela'?'Salário de '+esc(f.funcao):'Salário combinado'}</span><b class="num">${salPrazoMes(f)?brl(salPrazoMes(f)):'Não cadastrado'}</b><span class="hint">por mês · ${{acordo:'do acordo dele (Alterar acordo)',ficha:'combinado na ficha',tabela:'tabela da aba Funções; para outro valor, use o salário do acordo'}[salPrazoOrig(f)]}</span></div>
-       <div class="ac-card"><span class="hint">1ª quinzena</span><b>40%</b><span class="hint">2ª quinzena: o restante, com as faltas descontadas</span></div>
+       <div class="ac-card"><span class="hint">1ª quinzena</span><b>${pctTxt(f)}</b><span class="hint">2ª quinzena: o restante, com as faltas descontadas</span>${dp?`<select data-pctq1="${f.id}" aria-label="Divisão do salário de ${esc(f.nome)}" style="margin-top:4px"><option value="40" ${pctQ1(f)===.4?'selected':''}>40% e 60%</option><option value="50" ${pctQ1(f)===.5?'selected':''}>50% e 50%</option></select>`:''}</div>
        ${+f.descMensal?.valor?`<div class="ac-card"><span class="hint">${esc(f.descMensal.motivo)}</span><b class="num">− ${brl(+f.descMensal.valor)}</b><span class="hint">por mês, na 2ª quinzena</span></div>`:''}</div>
        <p style="margin:0 0 6px">${dp?`<label class="ac-chk" style="font-weight:500"><input type="checkbox" data-pagaalelo="${f.id}" ${f.pagaAlelo?'checked':''}> Não recebe nada em espécie</label> <span class="hint">(ao fechar cada quinzena, digite quanto vai no Alelo Alimentação; o restante já vem no Alelo Saldo Livre. Desmarcado: o que não for para os cartões sai em espécie. Os valores da última quinzena vêm sugeridos.)</span>`:`<span class="hint">Forma de pagamento: ${f.pagaAlelo?'só cartões Alelo':'espécie e/ou cartões Alelo'}</span>`}</p>
        ${dp&&S.salpEdit!==f.id?`<p style="margin:0 0 6px"><button class="btn" data-salpedit="${f.id}">Desconto mensal</button> <span class="hint">desconto fixo na 2ª quinzena (ex.: parcela do carro). O salário próprio dele vai no acordo (Alterar acordo → Salário mensal). O Alelo é digitado ao fechar cada quinzena.</span></p>`:''}
@@ -1821,7 +1821,10 @@ function aplicarPrazo(f,ate){
   registrar(`Avulso por prazo · ${f.nome}`,antes?`até ${antes}`:'Período de teste',`Avulso por prazo até ${ate} (sem período de teste)`,'Avulso por prazo');
 }
 // campo do cadastro e da readmissão: "avulso por prazo" (aparece quando o vínculo é avulso)
-const prazoCampo=(id,adm)=>`<div class="field prazo-box" id="${id}"><label class="ac-chk" style="font-weight:500"><input type="checkbox" name="prazoChk"> Avulso por prazo, sem período de teste, até:</label><input type="text" name="prazoAte" data-date="1" inputmode="numeric" value="${maisMeses(adm,6)}" placeholder="DD/MM/AAAA"></div>`;
+const prazoCampo=(id,adm)=>`<div class="field prazo-box" id="${id}"><label class="ac-chk" style="font-weight:500"><input type="checkbox" name="prazoChk"> Avulso por prazo, sem período de teste, até:</label><input type="text" name="prazoAte" data-date="1" inputmode="numeric" value="${maisMeses(adm,6)}" placeholder="DD/MM/AAAA">
+  <label style="font-weight:500;margin-top:4px">Pagamento do salário: <select name="pctQ1" aria-label="Divisão do salário entre as quinzenas"><option value="40">40% na 1ª quinzena e 60% na 2ª</option><option value="50">50% na 1ª quinzena e 50% na 2ª</option></select></label></div>`;
+// parte do salário do avulso por prazo paga na 1ª quinzena (0,4 padrão ou 0,5)
+const pctQ1=f=>f.pctQ1===.5?.5:.4,pctTxt=f=>pctQ1(f)===.5?'50%':'40%';
 // Readmissão de quem já saiu (ex.: recontratado como avulso): a saída anterior vai para o histórico e ele volta às listas
 function readmHTML(f){
   const emp=empresaDe(f),hoje=new Date().toLocaleDateString('pt-BR');
@@ -2053,6 +2056,7 @@ $('#view').addEventListener('submit',e=>{
     S.ponto[f.id]=S.ponto[f.id]||{};
     delete f.avulsoPrazo;
     if(prazo)aplicarPrazo(f,prazo);
+    if(prazo&&fm.pctQ1?.value==='50')f.pctQ1=.5;else delete f.pctQ1;
     registrar(`Readmissão · ${f.nome}`,`Desligado em ${f.saidasAnteriores.slice(-1)[0].data}`,`Readmitido em ${adm} na ${emp} · ${vinc==='avulso'?'avulso':'mensalista'} · ${funcao} · ${OBRAS[obra]?.nome||''}`,motivo||'Readmissão');
     S.readmEdit=null;S.verDeslig=false;S.cadSel=f.id;if(!TODAS()&&S.empresa!==emp){S.empresa=emp;$('#selEmp').value=emp}
     render();return toast(`${f.nome} readmitido em ${adm} como ${vinc==='avulso'?'avulso':'mensalista'}.${vinc==='mensalista'?' Confira o acordo na ficha.':''}`);
@@ -2286,7 +2290,7 @@ $('#view').addEventListener('submit',e=>{
     const f={id,nome,cpf:fmtCpf(fm.cpf.value),funcao,vinc,vh:[{de:1,vinc}],lot:[{de:1,obra:fm.obra.value}],diaria:vinc==='avulso'?DIARIAS[funcao]:undefined,diariasLancadas:0,
       adm,contrat:{empresa:emp,obra:fm.obra.value,funcao,vinc},
       acordos:[{desde:COMP,ben:ac.ben,tarifa:ac.tarifa,pg:ac.pg||{},cesta:!!ac.cesta,salario:ac.salario||null,peric:ac.peric||null,insal:ac.insal||null,insalBase:ac.insalBase||null,ajudaFixa:!!ac.ajudaFixa,motivo:'Acordo da admissão',quem:'DP'}]};
-    FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};S.cadSel=id;if(prazoN)aplicarPrazo(f,prazoN);if(adavN)darAdav(f,adavN,adm);
+    FUNC[emp].push(f);ALL.push(f);S.ponto[id]={};S.cadSel=id;if(prazoN)aplicarPrazo(f,prazoN);if(prazoN&&fm.pctQ1?.value==='50')f.pctQ1=.5;if(adavN)darAdav(f,adavN,adm);
     if(emp!==S.empresa&&!TODAS()){S.empresa=emp;$('#selEmp').value=emp}
     registrar(`Cadastro · ${nome}`,'—',`Admitido na ${emp} em ${adm} para ${OBRAS[fm.obra.value].nome} · `+(vinc==='avulso'?'avulso':resumoTxt(f.acordos[0])),'Admissão');
     // admitido direto como mensalista neste mês: entrega na entrada o auxílio dos dias restantes e a cesta do mês
@@ -2366,7 +2370,7 @@ function reciboHTML(f,tipo,rec){
     const vq=S.qf[rec.q]?.[f.id]||valorQ(f,rec.q),ds=vq.ds,bq=brutoQ(vq),dq=+vq.desc||0;
     valor=vq.valor;titulo=`Recibo de pagamento - ${QZ[rec.q].nome}`;
     const obras=[...new Set(ds.map(d=>{const r=S.ponto[f.id][d];return OBRAS[resolve(r.o)]?.nome||r.o}))].join(', ');
-    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente ${vq.prazo?`${rec.q===1?'a <b>40% do valor mensal</b>':'ao <b>restante do valor mensal</b>'} do serviço prestado como avulso por prazo na função de ${esc(f.funcao)}`:`a <b>${nfmt(vq.n)} diária(s)</b> de serviço prestado na função de ${esc(f.funcao)}`}, na <b>${QZ[rec.q].nome} de ${MES_NOME}</b> (${dd(QZ[rec.q].ini)} a ${dd(QZ[rec.q].fim)}/${ANO})${dq?`, já descontado o <b>adiantamento para despesas de ${brl(dq)}</b> recebido em ${esc(f.adiantAv?.data||'')}`:''}.`;
+    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente ${vq.prazo?`${rec.q===1?`a <b>${vq.prazo.pct?Math.round(vq.prazo.pct*100):40}% do valor mensal</b>`:'ao <b>restante do valor mensal</b>'} do serviço prestado como avulso por prazo na função de ${esc(f.funcao)}`:`a <b>${nfmt(vq.n)} diária(s)</b> de serviço prestado na função de ${esc(f.funcao)}`}, na <b>${QZ[rec.q].nome} de ${MES_NOME}</b> (${dd(QZ[rec.q].ini)} a ${dd(QZ[rec.q].fim)}/${ANO})${dq?`, já descontado o <b>adiantamento para despesas de ${brl(dq)}</b> recebido em ${esc(f.adiantAv?.data||'')}`:''}.`;
     dias=`Dias de serviço: ${ds.map(d=>dd(d)).join(', ')||'—'} · Obra(s): ${esc(obras)||'—'}${+vq.alelo?` · Forma de pagamento: ${formaQ(vq)}`:''}`;
     detalhe=linhasQ(f,vq,rec.q).map(l=>`<tr><td>${l[0]}${l[1]&&vq.prazo?` <span class="hint">(${l[1]})</span>`:''}</td><td>${l[2]<0?'−'+brl(-l[2]):brl(l[2])}</td></tr>`).join('');
   } else {
@@ -2405,16 +2409,16 @@ function valorQ(f,q){
   return {ds,n,nv,bruto,desc,emp,valor:Math.round((bruto-desc-emp)*100)/100,...(sp?{prazo:sp}:{})};
 }
 // Salário do avulso por prazo no mês: salário da função proporcional aos dias úteis desde o início,
-// menos as faltas (F e SU) em dias úteis; 40% na 1ª quinzena e o restante na 2ª
+// menos as faltas (F e SU) em dias úteis; 40% (ou 50%, f.pctQ1) na 1ª quinzena e o restante na 2ª
 const r2=v=>Math.round(v*100)/100;
 // linhas do pagamento da quinzena [descrição, detalhe, valor] (diárias ou salário do avulso por prazo, e o desconto do adiantamento)
 function linhasQ(f,u,q){
   const s=u.prazo,L=[];
   if(!s)L.push([`${nfmt(u.n)} diária(s) × ${brl(f.diaria||DIARIAS[f.funcao])}`,'dias: '+(u.ds.map(dd).join(', ')||'—'),brutoQ(u)]);
-  else if(q===1)L.push([`40% do salário ${s.proprio?'combinado':'de '+esc(f.funcao)} (${brl(s.M)} por mês)`,s.du<s.DU?`proporcional: ${s.du} de ${s.DU} dias úteis do mês`:`avulso por prazo · ${MES_NOME}`,brutoQ(u)]);
+  else if(q===1)L.push([`${Math.round((s.pct||.4)*100)}% do salário ${s.proprio?'combinado':'de '+esc(f.funcao)} (${brl(s.M)} por mês)`,s.du<s.DU?`proporcional: ${s.du} de ${s.DU} dias úteis do mês`:`avulso por prazo · ${MES_NOME}`,brutoQ(u)]);
   else{L.push([`Salário de ${MES_NOME} (${brl(s.M)} por mês)`,`${s.du} de ${s.DU} dias úteis`,s.base]);
     if(s.descF)L.push([`(−) Faltas`,`${s.faltas} dia(s) útil(eis) × ${brl(s.M/s.DU)}`,-s.descF]);
-    if(s.q1)L.push([`(−) Pago na 1ª quinzena`,'40%',-s.q1])}
+    if(s.q1)L.push([`(−) Pago na 1ª quinzena`,`${Math.round((s.pct||.4)*100)}%`,-s.q1])}
   if(u.desc)L.push([`(−) Adiantamento para despesas`,`recebido em ${esc(f.adiantAv?.data||'')}${S.qf[q]?.[f.id]?'':' · desconto previsto'}`,-u.desc]);
   if(u.emp)L.push([`(−) ${esc(s?.descMot||'Desconto mensal')}`,'desconto mensal combinado',-u.emp]);
   return L;
@@ -2427,8 +2431,8 @@ function salPrazo(f){
   let du=0,faltas=0;
   for(let d=1;d<=NDIAS;d++)if(obrig(d)&&d>=ini&&d<=fim){du++;if(p[d]&&(p[d].c==='F'||p[d].c==='SU'))faltas++}
   const DU=DU_AGO||1,base=r2(M*du/DU),descF=r2(M/DU*faltas),total=Math.max(0,r2(base-descF));
-  const fe1=S.qf[1]?.[f.id],q1=fe1?brutoQ(fe1):(ini<=15?r2(base*.4):0);
-  return {M,du,DU,faltas,base,descF,total,q1,q2:Math.max(0,r2(total-q1)),semSal:!M,proprio:salPrazoOrig(f)!=='tabela',
+  const pct=pctQ1(f),fe1=S.qf[1]?.[f.id],q1=fe1?brutoQ(fe1):(ini<=15?r2(base*pct):0);
+  return {M,du,DU,faltas,base,descF,total,q1,pct:fe1?.prazo?.pct||pct,q2:Math.max(0,r2(total-q1)),semSal:!M,proprio:salPrazoOrig(f)!=='tabela',
     descEmp:+f.descMensal?.valor||0,descMot:f.descMensal?.motivo||'Desconto mensal'};
 }
 // Adiantamento para despesas do avulso (f.adiantAv={valor,data,comp,quando,desc:[{comp,q,valor}]}):
@@ -2585,7 +2589,7 @@ function quinzenaHTML(dp){
     for(const f of fs){
       const fe=S.qf[q][f.id],v=fe||valorQ(f,q),semSal=!fe&&!!v.prazo?.semSal,bloq=!fe&&(valorQ(f,q).nv>0||semSal);
       h+=`<tr>${pode?`<td>${fe?'':`<input type="checkbox" class="qchk" data-q="${q}" value="${f.id}" ${bloq?'disabled':''} aria-label="Selecionar ${esc(f.nome)}">`}</td>`:''}
-        <td style="text-align:left;font-family:var(--f-body)"><b>${esc(f.nome)}</b><br><span class="hint">${esc(f.funcao)} · ${v.prazo?`por prazo: salário ${brl(v.prazo.M)} (${q===1?'40%':'restante'})`:'diária '+brl(f.diaria||DIARIAS[f.funcao])}</span></td>
+        <td style="text-align:left;font-family:var(--f-body)"><b>${esc(f.nome)}</b><br><span class="hint">${esc(f.funcao)} · ${v.prazo?`por prazo: salário ${brl(v.prazo.M)} (${q===1?Math.round((v.prazo.pct||.4)*100)+'%':'restante'})`:'diária '+brl(f.diaria||DIARIAS[f.funcao])}</span></td>
         <td style="text-align:left;white-space:normal;font-family:var(--f-body)">${v.ds.map(d=>dd(d)).join(', ')}</td><td>${nfmt(v.n)}</td><td>${brl(v.valor)}${v.desc?`<br><span class="hint">${brl(brutoQ(v))} − adiant. ${brl(v.desc)}</span>`:''}${v.emp?`<br><span class="hint">− ${esc(v.prazo.descMot)} ${brl(v.emp)}</span>`:''}${fe&&formaQ(fe)?`<br><span class="hint">${formaQ(fe)}</span>`:''}${!fe&&pode?'<br>'+aleloCampo(f,q,v):''}</td>
         <td style="text-align:left;font-family:var(--f-body)">${fe?`<span class="chip ok" style="padding:2px 9px">Fechado</span> <span class="hint">${fe.quando}</span>`:semSal?`<span class="hint">Cadastre o salário de ${esc(f.funcao)} (aba Funções)</span>`:bloq?'<span class="hint">Vincular nome de obra</span>':'<span class="hint">Liberado</span>'}</td>
         ${dp?`<td style="white-space:nowrap">${fe?`<button class="btn primary" data-qrec="${q}:${f.id}">Recibo</button>${pode?` <button class="btn" data-qreab="${q}:${f.id}">Reabrir</button>`:''}`:''}</td>`:''}</tr>`;
@@ -3065,6 +3069,10 @@ $('#view').addEventListener('change',e=>{
   if(e.target.matches('[data-aletipo]')){const f=byId(e.target.dataset.aletipo);if(!f)return;const t=e.target.value==='alim'?'alim':'livre',antes=aleloTipo(f);
     if(t==='alim')f.aleloTipo='alim';else delete f.aleloTipo;
     registrar(`Avulso por prazo · ${f.nome}`,ALELO_NOME[antes],ALELO_NOME[t],'Cartão Alelo');render();return toast(`${f.nome}: ${ALELO_NOME[t]}.`)}
+  if(e.target.matches('[data-pctq1]')){const f=byId(e.target.dataset.pctq1);if(!f)return;const antes=pctTxt(f);
+    if(e.target.value==='50')f.pctQ1=.5;else delete f.pctQ1;
+    registrar(`Avulso por prazo · ${f.nome}`,`${antes} na 1ª quinzena`,`${pctTxt(f)} na 1ª quinzena`,'Divisão do salário');render();
+    return toast(`${f.nome}: ${pctTxt(f)} do salário na 1ª quinzena${S.qf[1]?.[f.id]?' (a 1ª quinzena deste mês já foi fechada e não muda)':''}.`)}
   if(e.target.matches('[data-pagaalelo]')){const f=byId(e.target.dataset.pagaalelo);if(!f)return;const on=e.target.checked;
     if(on)f.pagaAlelo=true;else delete f.pagaAlelo;
     registrar(`Avulso por prazo · ${f.nome}`,on?'Espécie':'Cartão Alelo',on?'Cartão Alelo (tudo)':'Espécie','Forma de pagamento');render();
