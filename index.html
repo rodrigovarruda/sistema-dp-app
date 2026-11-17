@@ -1721,7 +1721,7 @@ function renderCad(){
          <div class="field"><label for="spMot">Descrição do desconto</label><input type="text" id="spMot" name="mot" value="${esc(f.descMensal?.motivo||'')}" placeholder="Ex.: Parcela do carro"></div></div>
          <p class="hint" style="margin:0">Vale para as quinzenas ainda abertas. Quinzenas já fechadas não mudam.</p>
          <div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-salpedit="">Cancelar</button></div></form>`:''}
-       <p class="hint">Proporcional aos dias úteis no mês de início. Cada falta (F ou SU) em dia útil desconta salário ÷ dias úteis do mês. Benefícios: os do acordo abaixo, como mensalista.</p>${adavHTML(f,dp)}`:''}
+       <p class="hint">Pelos dias corridos do mês: no mês de início, salário ÷ dias do mês × dias desde o início. Cada falta (F ou SU) desconta salário ÷ dias do mês. Benefícios: os do acordo abaixo, como mensalista.</p>${adavHTML(f,dp)}`:''}
        ${f.vinc==='avulso'&&!porPrazo(f)?`<h3 class="sub">Pagamento do avulso</h3>
        <div class="ac-cards"><div class="ac-card"><span class="hint">Diária de ${esc(f.funcao)}</span><b class="num">${brl(f.diaria||DIARIAS[f.funcao])}</b><span class="hint">por dia de serviço</span></div>
        <div class="ac-card off"><span class="hint">Passagem e alimentação</span><b>Incluídas na diária</b></div></div>
@@ -2371,7 +2371,7 @@ function reciboHTML(f,tipo,rec){
     const vq=S.qf[rec.q]?.[f.id]||valorQ(f,rec.q),ds=vq.ds,bq=brutoQ(vq),dq=+vq.desc||0;
     valor=vq.valor;titulo=`Recibo de pagamento - ${QZ[rec.q].nome}`;
     const obras=[...new Set(ds.map(d=>{const r=S.ponto[f.id][d];return OBRAS[resolve(r.o)]?.nome||r.o}))].join(', ');
-    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente ${vq.prazo?`${rec.q===1?(vq.prazo.porDias?`aos <b>dias úteis trabalhados desde ${dd(vq.prazo.ini)}</b>`:`a <b>${vq.prazo.pct?Math.round(vq.prazo.pct*100):40}% do valor mensal</b>`):'ao <b>restante do valor mensal</b>'} do serviço prestado como avulso por prazo na função de ${esc(f.funcao)}`:`a <b>${nfmt(vq.n)} diária(s)</b> de serviço prestado na função de ${esc(f.funcao)}`}, na <b>${QZ[rec.q].nome} de ${MES_NOME}</b> (${dd(QZ[rec.q].ini)} a ${dd(QZ[rec.q].fim)}/${ANO})${dq?`, já descontado o <b>adiantamento para despesas de ${brl(dq)}</b> recebido em ${esc(f.adiantAv?.data||'')}`:''}.`;
+    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente ${vq.prazo?`${rec.q===1?(vq.prazo.porDias?`aos <b>dias desde ${dd(vq.prazo.ini)}</b>`:`a <b>${vq.prazo.pct?Math.round(vq.prazo.pct*100):40}% do valor mensal</b>`):'ao <b>restante do valor mensal</b>'} do serviço prestado como avulso por prazo na função de ${esc(f.funcao)}`:`a <b>${nfmt(vq.n)} diária(s)</b> de serviço prestado na função de ${esc(f.funcao)}`}, na <b>${QZ[rec.q].nome} de ${MES_NOME}</b> (${dd(QZ[rec.q].ini)} a ${dd(QZ[rec.q].fim)}/${ANO})${dq?`, já descontado o <b>adiantamento para despesas de ${brl(dq)}</b> recebido em ${esc(f.adiantAv?.data||'')}`:''}.`;
     dias=`Dias de serviço: ${ds.map(d=>dd(d)).join(', ')||'—'} · Obra(s): ${esc(obras)||'—'}${+vq.alelo?` · Forma de pagamento: ${formaQ(vq)}`:''}`;
     detalhe=linhasQ(f,vq,rec.q).map(l=>`<tr><td>${l[0]}${l[1]&&vq.prazo?` <span class="hint">(${l[1]})</span>`:''}</td><td>${l[2]<0?'−'+brl(-l[2]):brl(l[2])}</td></tr>`).join('');
   } else {
@@ -2409,18 +2409,18 @@ function valorQ(f,q){
   const emp=sp&&q===2?Math.max(0,Math.min(sp.descEmp,r2(bruto-desc))):0;
   return {ds,n,nv,bruto,desc,emp,valor:Math.round((bruto-desc-emp)*100)/100,...(sp?{prazo:sp}:{})};
 }
-// Salário do avulso por prazo no mês: salário da função proporcional aos dias úteis desde o início,
+// Salário do avulso por prazo no mês: salário proporcional aos dias corridos desde o início,
 // menos as faltas (F e SU) em dias úteis; 40% (ou 50%, f.pctQ1) na 1ª quinzena e o restante na 2ª
 const r2=v=>Math.round(v*100)/100;
 // linhas do pagamento da quinzena [descrição, detalhe, valor] (diárias ou salário do avulso por prazo, e o desconto do adiantamento)
 function linhasQ(f,u,q){
   const s=u.prazo,L=[];
   if(!s)L.push([`${nfmt(u.n)} diária(s) × ${brl(f.diaria||DIARIAS[f.funcao])}`,'dias: '+(u.ds.map(dd).join(', ')||'—'),brutoQ(u)]);
-  else if(q===1)L.push(s.porDias?[`Salário de ${s.du1} dia(s) útil(eis) da 1ª quinzena, desde ${dd(s.ini)} (${brl(s.M)} por mês)`,`${brl(s.M)} ÷ ${s.DU} dias úteis do mês × ${s.du1}`,brutoQ(u)]
-    :[`${Math.round((s.pct||.4)*100)}% do salário ${s.proprio?'combinado':'de '+esc(f.funcao)} (${brl(s.M)} por mês)`,s.du<s.DU?`proporcional: ${s.du} de ${s.DU} dias úteis do mês${s.ini>1?' desde '+dd(s.ini):''}`:`avulso por prazo · ${MES_NOME}`,brutoQ(u)]);
-  else{L.push([`Salário de ${MES_NOME} (${brl(s.M)} por mês)`,`${s.du} de ${s.DU} dias úteis${s.ini>1?' desde '+dd(s.ini):''}`,s.base]);
-    if(s.descF)L.push([`(−) Faltas`,`${s.faltas} dia(s) útil(eis) × ${brl(s.M/s.DU)}`,-s.descF]);
-    if(s.q1)L.push([`(−) Pago na 1ª quinzena`,s.porDias?`${s.du1} dia(s) útil(eis)`:`${Math.round((s.pct||.4)*100)}%`,-s.q1])}
+  else if(q===1)L.push(s.porDias?[`Salário de ${s.du1} dia(s) da 1ª quinzena, desde ${dd(s.ini)} (${brl(s.M)} por mês)`,`${brl(s.M)} ÷ ${s.DU} dias do mês × ${s.du1}`,brutoQ(u)]
+    :[`${Math.round((s.pct||.4)*100)}% do salário ${s.proprio?'combinado':'de '+esc(f.funcao)} (${brl(s.M)} por mês)`,s.du<s.DU?`proporcional: ${s.du} de ${s.DU} dias do mês${s.ini>1?' desde '+dd(s.ini):''}`:`avulso por prazo · ${MES_NOME}`,brutoQ(u)]);
+  else{L.push([`Salário de ${MES_NOME} (${brl(s.M)} por mês)`,`${s.du} de ${s.DU} dias${s.ini>1?' desde '+dd(s.ini):''}`,s.base]);
+    if(s.descF)L.push([`(−) Faltas`,`${s.faltas} dia(s) × ${brl(s.M/s.DU)}`,-s.descF]);
+    if(s.q1)L.push([`(−) Pago na 1ª quinzena`,s.porDias?`${s.du1} dia(s)`:`${Math.round((s.pct||.4)*100)}%`,-s.q1])}
   if(u.desc)L.push([`(−) Adiantamento para despesas`,`recebido em ${esc(f.adiantAv?.data||'')}${S.qf[q]?.[f.id]?'':' · desconto previsto'}`,-u.desc]);
   if(u.emp)L.push([`(−) ${esc(s?.descMot||'Desconto mensal')}`,'desconto mensal combinado',-u.emp]);
   return L;
@@ -2433,9 +2433,10 @@ function salPrazo(f){
   const iniAv=(()=>{let d=1;f.vh.forEach((x,i)=>{if(x.vinc!=='avulso')d=f.vh[i+1]?.de||NDIAS+1});return d})();
   const M=salPrazoMes(f),ini=Math.max(admDia(f),iniAv),fim=saidaDia(f)||NDIAS,p=S.ponto[f.id]||{};
   let du=0,du1=0,faltas=0;
-  for(let d=1;d<=NDIAS;d++)if(obrig(d)&&d>=ini&&d<=fim){du++;if(d<=15)du1++;if(p[d]&&(p[d].c==='F'||p[d].c==='SU'))faltas++}
-  const DU=DU_AGO||1,base=r2(M*du/DU),descF=r2(M/DU*faltas),total=Math.max(0,r2(base-descF));
-  // 1ª quinzena: 40% (ou 50%) do mês; quem começou no meio dela recebe no máximo os dias úteis dela
+  // pelos dias corridos do mês (todos, inclusive sábados, domingos e feriados): salário ÷ dias do mês × dias
+  for(let d=1;d<=NDIAS;d++)if(d>=ini&&d<=fim){du++;if(d<=15)du1++;if(p[d]&&(p[d].c==='F'||p[d].c==='SU'))faltas++}
+  const DU=NDIAS||30,base=r2(M*du/DU),descF=r2(M/DU*faltas),total=Math.max(0,r2(base-descF));
+  // 1ª quinzena: 40% (ou 50%) do mês; quem começou no meio dela recebe no máximo os dias dela
   const pct=pctQ1(f),fe1=S.qf[1]?.[f.id],q1Pct=r2(base*pct),q1Dias=r2(M*du1/DU),porDias=ini>1&&q1Dias<q1Pct;
   const q1=fe1?brutoQ(fe1):(ini<=15?(porDias?q1Dias:q1Pct):0);
   return {M,du,du1,DU,ini,faltas,base,descF,total,q1,porDias:fe1?!!fe1.prazo?.porDias:porDias,pct:fe1?.prazo?.pct||pct,q2:Math.max(0,r2(total-q1)),semSal:!M,proprio:salPrazoOrig(f)!=='tabela',
