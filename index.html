@@ -2918,6 +2918,8 @@ $('#view').addEventListener('change',e=>{
     registrar(`Conta de pagamento · ${f.nome}`,antes,f.conta||'—','Conta do salário');render();return toast(f.conta?`${f.nome} recebe pela ${f.conta}.`:'Conta removida.')}
   if(e.target.matches('[data-pagdata]')){const [emp,conta,q]=e.target.dataset.pagdata.split('|'),v=e.target.value.trim();
     if(v&&!lerData(v))return toast('Data inválida. Use DD/MM/AAAA.');
+    // pagamento da competência sai no próprio mês ou no mês seguinte (ex.: evita 2016 no lugar de 2026)
+    if(v){const d=lerData(v),k=d.getFullYear()*12+d.getMonth(),c=ANO*12+MES;if(k<c||k>c+1){e.target.value=pagData(emp,conta,q)||'';return toast(`Data fora do período: o pagamento de ${MES_NOME} deve ser em ${MES_NOME} ou no mês seguinte. Confira o ano.`)}}
     S.folha=S.folha||{};const D=S.folha._datas=S.folha._datas||{};D[emp]=D[emp]||{};D[emp][conta]=D[emp][conta]||{};D[emp][conta][q]=v;
     registrar(`Pagamento ${q==='q1'?'1ª':'2ª'} quinzena · ${conta} · ${MES_NOME}`,'—',v||'sem data','Data de pagamento');render();return toast('Data salva.')}
   if(e.target.id==='nEmp'){$('#nObra').innerHTML=opcoesObraEmp(e.target.value);return}
