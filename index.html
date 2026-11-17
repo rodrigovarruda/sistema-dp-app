@@ -781,11 +781,23 @@ function renderSalarios(){
       // partes pagas em outra data saindo desta conta, somadas por data (aparecem na mesma célula, abaixo do pagamento normal)
       const outras=(conta,q)=>{const pd={};for(const f of fs){if(empresaDe(f)!==e)continue;for(const x of S.folha[f.id]?.extras||[])if(x.q===q&&(x.conta||'')===conta){(pd[x.data]=pd[x.data]||{v:0,n:0}).v+=+x.valor||0;pd[x.data].n++}}
         return Object.keys(pd).sort((a,b)=>lerData(a)-lerData(b)).map(d=>`<span class="conta-outra"><b class="num">${brl(pd[d].v)}</b> <span class="hint">em ${esc(d)} · ${pd[d].n} funcionário(s)</span></span>`).join('')};
-      const cel=(conta,q,campo)=>`<div class="conta-cel">${soma(tq(f=>(f.conta||'')===conta,q))}${campo}</div>${outras(conta,q)}`;
+      // dinheiro em espécie dos avulsos (diárias ou salário do avulso por prazo, menos a parte no Alelo, e adiantamento para despesas),
+      // pelo dia em que a quinzena foi fechada e paga; quinzena ainda aberta aparece como "a pagar"
+      const avEsp=q=>{const pd={},ab={v:0,n:0};
+        for(const f of visiveis()){if(empresaDe(f)!==e||!temAvulso(f))continue;
+          const x=S.qf[q==='q1'?1:2]?.[f.id];
+          if(x){const v=r2((+x.valor||0)-(+x.alelo||0)),d=String(x.quando||'').split(' ')[0];if(v>0){(pd[d]=pd[d]||{v:0,n:0,t:'avulso(s)'}).v+=v;pd[d].n++}}
+          else{const v=valorQ(f,q==='q1'?1:2).valor;if(v>0){ab.v+=v;ab.n++}}
+          const a=f.adiantAv;if(a&&a.comp===COMP&&((lerData(a.data)?.getDate()||1)<=15)===(q==='q1')){(pd[a.data]=pd[a.data]||{v:0,n:0,t:'avulso(s)'}).v+=a.valor;pd[a.data].n++}}
+        return Object.keys(pd).sort((a,b)=>lerData(a)-lerData(b)).map(d=>`<span class="conta-outra"><b class="num">${brl(r2(pd[d].v))}</b> <span class="hint">em ${esc(d)} · avulsos (diárias): ${pd[d].n}</span></span>`).join('')
+          +(ab.v?`<span class="conta-outra"><b class="num">${brl(r2(ab.v))}</b> <span class="hint">a pagar · avulsos com quinzena aberta: ${ab.n}</span></span>`:'')};
+      const ehEsp=c=>/esp[eé]cie/i.test(c),temEsp=contasDe(e).some(ehEsp);
+      const cel=(conta,q,campo)=>`<div class="conta-cel">${soma(tq(f=>(f.conta||'')===conta,q))}${campo}</div>${outras(conta,q)}${ehEsp(conta)?avEsp(q):''}`;
       const linhas=contasDe(e).map(c=>{const di=q=>cel(c,q,dp?`<input type="text" class="folha-in" data-pagdata="${e}|${esc(c)}|${q}" data-date="1" inputmode="numeric" value="${pagData(e,c,q)}" placeholder="DD/MM/AAAA" aria-label="Data de pagamento ${q==='q1'?'1ª':'2ª'} quinzena ${esc(c)}">`:(pagData(e,c,q)||'—'));
         return `<tr><td><span class="emp-chip emp-${e}">${e}</span> <b>${esc(c)}</b></td><td>${di('q1')}</td><td>${di('q2')}</td></tr>`});
       const sc1=tq(f=>!f.conta,'q1'),sc2=tq(f=>!f.conta,'q2'),os1=outras('','q1'),os2=outras('','q2');
       const semConta=fs.filter(f=>empresaDe(f)===e&&!f.conta&&((+S.folha[f.id]?.q1||0)||(+S.folha[f.id]?.q2||0)));
+      if(!temEsp){const a1=avEsp('q1'),a2=avEsp('q2');if(a1||a2)linhas.push(`<tr><td><span class="emp-chip emp-${e}">${e}</span> <b>Espécie</b><br><span class="hint">avulsos (cadastre a conta "Espécie" na aba Empresas)</span></td><td>${a1}</td><td>${a2}</td></tr>`)}
       if(sc1.v||sc2.v||os1||os2)linhas.push(`<tr><td style="white-space:normal"><span class="emp-chip emp-${e}">${e}</span> <b style="color:var(--bad)">Sem conta escolhida</b>${semConta.length?`<br><span class="hint">Escolha a conta de pagamento de: </span>${semConta.map(f=>`<button class="link-btn" data-irconta="${f.id}">${esc(f.nome)}</button>`).join(', ')}`:'<br><span class="hint">pagamentos em outra data sem conta informada</span>'}</td><td>${cel('','q1','')}</td><td>${cel('','q2','')}</td></tr>`);
       return linhas}).join('')}
     </tbody></table></div>
