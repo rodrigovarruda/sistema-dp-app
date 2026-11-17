@@ -1032,16 +1032,10 @@ function custoFunc(f,guia=0){
   if(m){
     const ini=Math.max(m.de,admDia(f));
     const fo=S.folha?.[f.id],pago=fo?(+fo.q1||0)+(+fo.q2||0):0;
-    if(porPrazo(f)){it.sal1=brutoQ(S.qf[1]?.[f.id]||valorQ(f,1));it.sal2=brutoQ(S.qf[2]?.[f.id]||valorQ(f,2))}
+    // salário no custo só quando é real: folha importada (mensalista) ou quinzena já paga (avulso por prazo, espécie e Alelo).
+    // Sem folha não há estimativa (nem de insalubridade/periculosidade, que vêm dentro do salário da folha).
+    if(porPrazo(f)){it.sal1=S.qf[1]?.[f.id]?brutoQ(S.qf[1][f.id]):0;it.sal2=S.qf[2]?.[f.id]?brutoQ(S.qf[2][f.id]):0}
     else if(pago>0){it.sal1=+fo.q1||0;it.sal2=+fo.q2||0}
-    else if(A.salario&&ini<=NDIAS){estSal=true;const nF=Object.entries(p).filter(([d,x])=>+d>=ini&&(x.c==='F'||x.c==='SU')).length;
-      // estimativa sem folha: 40% na 1ª quinzena (adiantamento) e o resto na 2ª; registrado depois do dia 15 não tem
-      // adiantamento (a 1ª quinzena dele foi paga por diária, como avulso), então tudo vai para a 2ª
-      const fimV=saidaDia(f)||NDIAS,diasVinc=ini<=1&&fimV===NDIAS?30:Math.min(30,fimV-ini+1),est2=A.salario/30*Math.max(0,diasVinc-nF)*(1+(+E.encargos||0)/100);it.sal1=ini>15?0:est2*.4;it.sal2=est2-it.sal1;
-      // a insalubridade segue a mesma proporção do salário estimado (com o salário informado, ela já vem dentro dele)
-      fatorIns=Math.max(0,diasVinc-nF)/30*(1+(+E.encargos||0)/100);
-      // periculosidade: % do próprio salário, na mesma proporção, rateada pelas obras como o salário
-      if(A.peric)it.peric=A.salario*A.peric/100*fatorIns}
     if(c.itens.bonif)it.bonif=c.itens.bonif.valor;
     // verbas referentes a este mês: adiantamento/cesta do registro, ou fechamento do mês anterior
     if(diaEntrada(f)){const a=calcAdiant(f);if(a&&f.adiantQuando)for(const x of a.itens)it[x.k]+=x.valor;if(temCestaReg(f))it.cesta+=valorCesta(f)}
