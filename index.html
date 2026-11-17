@@ -999,10 +999,32 @@ function tabelaPagEmpresas(){
 function pagFormHTML(){
   return `<form id="pagForm" class="mes-form"><b>Relatório de pagamentos · ${MES_NOME}</b>
       <select name="esc" aria-label="Abrangência">${opcoesRel()}</select>
-      <select name="forma" aria-label="Forma de pagamento"><option value="todas">Todas as formas</option>${FORMAS_PAG.map(([k,l])=>`<option value="${k}" ${S.pagForma===k?'selected':''}>Só ${l}</option>`).join('')}</select>
+      <select name="forma" aria-label="Forma de pagamento"><option value="todas">Todas as formas</option>${FORMAS_PAG.map(([k,l])=>`<option value="${k}" ${S.pagForma===k?'selected':''}>Só ${l}</option>`).join('')}<option value="beneficios" ${S.pagForma==='beneficios'?'selected':''}>Cada benefício e a forma</option></select>
       <button class="btn primary" type="submit">Gerar relatório</button><button class="btn" type="button" data-pagfechar="1">Fechar</button></form>`;
 }
+// benefícios pagos no fechamento do mês: cada um com o valor e a forma, por funcionário, e o total de cada benefício em cada forma
+function relatorioBeneficios(escolha){
+  const {tipo,val,fs,titulo}=filtroRel(escolha),E=EMPRESAS[tipo==='emp'?val:tipo==='obra'?OBRAS[val]?.empresa:'CONARTE']||{};
+  const FM=[['esp','Espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard']],BK=Object.keys(BEN_NOMES);
+  const ls=fs.filter(f=>S.fechF[f.id]?.itens).map(f=>{const fe=S.fechF[f.id];return {f,fe,b:benFormas(fe,pgDoFech(f,fe,COMP))}})
+    .filter(x=>BK.some(k=>(+x.fe.itens[k]||0)>0)||x.fe.cesta).sort((a,b)=>empresaDe(a.f).localeCompare(empresaDe(b.f))||a.f.nome.localeCompare(b.f.nome));
+  const mat={};for(const k of BK)mat[k]={esp:0,alim:0,livre:0,natal:0};let nCesta=0,vCesta=0;
+  const cel=b=>{const ps=FM.filter(([m])=>b[m]>.004);if(!ps.length)return '—';return ps.map(([m,l])=>`${brl(b[m])}<br><span class="sub">${l}</span>`).join('<br>')};
+  const linha=x=>{let t=0;const cs=BK.map(k=>{const b=x.b[k];for(const [m] of FM){mat[k][m]+=b[m];t+=b[m]}return `<td>${cel(b)}</td>`}).join('');
+    const ce=x.fe.cesta?(+x.fe.cestaValor||0):0;if(x.fe.cesta){nCesta++;vCesta+=ce}
+    return `<tr><td><b>${esc(x.f.nome)}</b><br><span class="sub">${esc(empresaDe(x.f))} · ${esc(OBRAS[lotacao(x.f,NDIAS)]?.nome||'—')}</span></td>${cs}<td>${x.fe.cesta?brl(ce):'—'}</td><td><b>${brl(t+ce)}</b></td></tr>`};
+  const corpo=ls.map(linha).join('');
+  const totK=k=>FM.reduce((s,[m])=>s+mat[k][m],0),totM=m=>BK.reduce((s,k)=>s+mat[k][m],0),tg=FM.reduce((s,[m])=>s+totM(m),0);
+  const resumo=`<h3 style="margin:14px 0 6px">Total de cada benefício por forma de pagamento</h3><table><thead><tr><th>Benefício</th>${FM.map(([,l])=>`<th>${l}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+    ${BK.filter(k=>totK(k)>.004).map(k=>`<tr><td>${BEN_NOMES[k]}</td>${FM.map(([m])=>`<td>${mat[k][m]>.004?brl(mat[k][m]):'—'}</td>`).join('')}<td><b>${brl(totK(k))}</b></td></tr>`).join('')}
+    ${nCesta?`<tr><td>Cesta básica (${nCesta})</td>${FM.map(()=>'<td>—</td>').join('')}<td><b>${brl(vCesta)}</b></td></tr>`:''}</tbody>
+    <tfoot><tr><td>Total</td>${FM.map(([m])=>`<td>${brl(totM(m))}</td>`).join('')}<td>${brl(tg+vCesta)}</td></tr></tfoot></table>`;
+  janelaRelatorio({titulo:`Benefícios por forma de pagamento · ${titulo}`,meta:`Fechamento de ${MES_NOME} · ${ls.length} funcionário(s)`,logo:E.logo,deitado:true,
+    tabela:`<table><thead><tr><th>Funcionário</th>${BK.map(k=>`<th>${BEN_NOMES[k]}</th>`).join('')}<th>Cesta básica</th><th>Total</th></tr></thead><tbody>${corpo||`<tr><td colspan="${BK.length+3}">Nenhum fechamento com benefícios nesta seleção.</td></tr>`}</tbody></table>${ls.length?resumo:''}`,
+    nota:`Benefícios pagos no fechamento de ${MES_NOME}: bonificação de ${MES_CURTO} e ajuda de custo, café, alimentação e passagens de ${PROX_NOME}. A forma de cada benefício vem do acordo do funcionário; quando os valores dos cartões foram ajustados no fechamento, a diferença foi distribuída entre os benefícios, e o total de cada forma bate com o que foi pago.`});
+}
 function relatorioPagamentos(escolha,forma){
+  if(forma==='beneficios')return relatorioBeneficios(escolha);
   const {tipo,val,fs,titulo}=filtroRel(escolha),E=EMPRESAS[tipo==='emp'?val:tipo==='obra'?OBRAS[val]?.empresa:'CONARTE']||{};
   const so=forma!=='todas',nomeF=so?FORMAS_PAG.find(x=>x[0]===forma)[1]:'';
   const cols=so?[[forma,nomeF]]:[['adi','Adiantamento (espécie)'],['dia','Diárias (espécie)'],['auxEsp','Auxílio (espécie)'],['esp','Total espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard'],['cesta','Cesta básica'],['total','Total']];
@@ -1062,8 +1084,10 @@ function custoForma(f,guia=0){
   const contaEsp=/esp[eé]cie/i.test(f.conta||'');
   const rq=q=>{if(porPrazo(f)){const x=S.qf[q]?.[f.id];if(!x)return {def:1};const b=brutoQ(x)||0,pa=alPartes(x);if(!(b>0))return {esp:1};return {alim:pa.alim/b,livre:pa.livre/b,esp:Math.max(0,1-(pa.alim+pa.livre)/b)}}return contaEsp?{esp:1}:{banco:1}};
   const pv=S.comps?.[prevKey()]?.fechF?.[f.id],entrada=diaEntrada(f)&&f.adiantQuando;
-  const rBen=entrada?{esp:1}:(deFech(pv)||{def:1}),rBonif=deFech(S.fechF[f.id])||{def:1};
-  const R={diarias:{esp:1},sal1:rq(1),sal2:rq(2),insal:{banco:1},peric:{banco:1},bonif:rBonif,ajuda:rBen,cafe:rBen,alim:rBen,transp:rBen,cesta:{cesta:1},guias:{guias:1}};
+  // cada benefício pela forma em que ele foi pago no fechamento (não a média do fechamento todo)
+  const doItem=(fe,comp,k)=>{if(!fe)return null;const b=benFormas(fe,pgDoFech(f,fe,comp))[k],t=b?b.esp+b.alim+b.livre+b.natal:0;if(!(t>0))return deFech(fe);return {esp:b.esp/t,alim:b.alim/t,livre:b.livre/t,natal:b.natal/t}};
+  const rBen=k=>entrada?{esp:1}:(doItem(pv,prevKey(),k)||{def:1}),rBonif=doItem(S.fechF[f.id],COMP,'bonif')||{def:1};
+  const R={diarias:{esp:1},sal1:rq(1),sal2:rq(2),insal:{banco:1},peric:{banco:1},bonif:rBonif,ajuda:rBen('ajuda'),cafe:rBen('cafe'),alim:rBen('alim'),transp:rBen('transp'),cesta:{cesta:1},guias:{guias:1}};
   const out={};
   for(const [k,v] of Object.entries(c.out)){const o=out[k]=z();o.dias=v.dias;
     for(const [item] of CUSTO_COLS){const val=+v[item]||0;if(!val)continue;for(const [fm,p] of Object.entries(R[item]||{def:1}))o[fm]+=val*p}}
@@ -2612,6 +2636,20 @@ function lerAlelo(f,total){
   return {ok:true,alelo:a};
 }
 const ITEM_DE={bonif:'bonif',ajuda:'ajuda',cafe:'cafe',alim:'alim',tarifa:'transp'};
+// forma de pagamento de cada benefício num fechamento: a forma do acordo (pg) de cada item; se os cartões foram
+// ajustados na hora, o ajuste é distribuído entre os benefícios para os totais baterem com o que foi pago.
+// devolve {bonif:{esp,alim,livre,natal}, ajuda:{...}, ...}
+function benFormas(fe,pg){
+  const its=fe?.itens||{},out={},al=fe?.alelo||{},P=pg||{};
+  const destDe=k=>{const kk=k==='transp'?'tarifa':k,d=P[kk];return d==='alim'||d==='livre'||d==='natal'?d:'esp'};
+  for(const k of Object.keys(BEN_NOMES)){const v=+its[k]||0;out[k]={esp:0,alim:0,livre:0,natal:0};if(v)out[k][destDe(k)]=v}
+  for(const d of ['alim','livre','natal']){const alvo=+al[d]||0,ks=Object.keys(out),tem=ks.reduce((s,k)=>s+out[k][d],0);
+    if(tem>alvo+.004){const f=alvo/tem;for(const k of ks){const x=out[k][d]*(1-f);out[k][d]-=x;out[k].esp+=x}}
+    else if(alvo>tem+.004){let falta=alvo-tem;const esp=ks.reduce((s,k)=>s+out[k].esp,0);if(esp>0){const f=Math.min(1,falta/esp);for(const k of ks){const x=out[k].esp*f;out[k].esp-=x;out[k][d]+=x}}}}
+  return out;
+}
+// forma do acordo usada no fechamento (guardada a partir de agora; antes, a do acordo daquele mês)
+const pgDoFech=(f,fe,comp)=>fe?.pg||acordo(f,comp)?.pg||{};
 function aleloPadrao(f,total){
   const A=acordo(f),pg=A.pg||{};
   if(Object.keys(pg).length){const c=calc(f),r={alim:0,livre:0,natal:0};
@@ -2623,7 +2661,7 @@ function gravarFech(f,q,alelo,cesta){
   const c=calc(f),aux=auxTotal(c);
   if(cesta===undefined)cesta=!!acordo(f).cesta;
   if(saidaDia(f))cesta=false; // quem sai não recebe a cesta do mês seguinte
-  S.fechF[f.id]={quando:q,total:c.total,aux,alelo,especie:Math.round((aux-aleloSoma(alelo))*100)/100,cesta:!!acordo(f).cesta&&cesta,cestaValor:valorCesta(f),
+  S.fechF[f.id]={quando:q,total:c.total,aux,alelo,pg:{...(acordo(f).pg||{})},especie:Math.round((aux-aleloSoma(alelo))*100)/100,cesta:!!acordo(f).cesta&&cesta,cestaValor:valorCesta(f),
     itens:Object.fromEntries(Object.keys(BEN_NOMES).map(k=>[k,c.itens[k]?.valor||0]))};
   if(aleloSoma(alelo)>0)f.aleloPadrao={...alelo};
   registrar(`Fechamento · ${f.nome} · ${MES_NOME}`,'Aberto',`Fechado · auxílio-transporte ${brl(aux)}${aleloSoma(alelo)?` (espécie ${brl(aux-aleloSoma(alelo))} · Alelo Alimentação ${brl(alelo.alim)} · Alelo Saldo Livre ${brl(alelo.livre)}${alelo.natal?' · NatalCard '+brl(alelo.natal):''})`:''}`,'Fechamento da 2ª quinzena');
