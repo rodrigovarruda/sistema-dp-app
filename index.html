@@ -1123,7 +1123,7 @@ function renderCustoForma(fs,parte,nomeK){
   if(!lista.length)h+=`<tr><td colspan="${cols.length+5}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
   for(const [k,o] of lista){
     h+=`<tr class="row ${empCls(k)}-bar" data-custo="${esc(k)}" tabindex="0"><td><b>${esc(nomeK(k))}</b>${OBRAS[k]?` <span class="emp-chip ${empCls(k)}" style="font-size:10px;padding:1px 6px">${OBRAS[k].empresa}</span>`:''}</td><td>${o.func.length}</td><td>${nfmt(o.dias)}</td>${cols.map(([c2])=>`<td>${num(o[c2])}</td>`).join('')}${pagoTd(o.tot,o.def,true)}<td>${temPrev?'':'<b>'}${nfmt2(o.tot)}${temPrev?'':'</b>'}</td></tr>`;
-    if(S.custoAberto===k)h+=`<tr class="custo-fh"><th>Funcionário</th><th></th><th>Dias</th>${cab}</tr>
+    if(S.custoAberto===k||S.custoTodos)h+=`<tr class="custo-fh"><th>Funcionário</th><th></th><th>Dias</th>${cab}</tr>
       ${o.func.sort((a,b)=>b.t-a.t).map(x=>`<tr class="custo-f"><td>${esc(x.f.nome)}${selo(x.f)}${x.f.conta&&x.v.banco>.004?` <span class="hint">${esc(x.f.conta)}</span>`:''}</td><td></td><td>${nfmt(x.v.dias)}</td>${cols.map(([c2])=>`<td>${num(x.v[c2])}</td>`).join('')}${pagoTd(x.t,x.v.def,true)}<td>${temPrev?'':'<b>'}${nfmt2(x.t)}${temPrev?'':'</b>'}</td></tr>`).join('')}`;
   }
   h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${cols.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}${pagoTd(tot.tot,tot.def)}<td>${nfmt2(tot.tot)}</td></tr></tfoot></table></div>
@@ -1133,6 +1133,19 @@ function renderCustoForma(fs,parte,nomeK){
     <span>Conta bancária: salário da folha importada, pela conta escolhida do funcionário na aba Salários.</span>
     ${temPrev?`<span>Previsto (a pagar): entra no custo do mês, mas ainda não foi pago: bonificação do mês ainda não fechado, benefícios e cesta sem o fechamento do mês anterior (estimados pelo acordo), diárias e salário do avulso por prazo de quinzena ainda aberta. Ao pagar, o valor sai daqui e vai para a coluna da forma em que foi pago.</span><span>Total pago: só o que já saiu. Total com previsto: o custo do mês, igual ao da visão por tipo.</span>`:''}</div>`;
   return h;
+}
+// imprime o custo por obra da visão na tela (por tipo ou por forma), com ou sem os funcionários de cada obra
+function imprimirCusto(det){
+  S.custoTodos=det;render();
+  const tb=$('#view table.custo'),lg=[...document.querySelectorAll('#view .legend span')].map(x=>x.innerText.trim()).filter(Boolean);
+  S.custoTodos=false;render();
+  if(!tb)return toast('Nada para imprimir.');
+  const t=tb.cloneNode(true);t.querySelectorAll('[data-custo]').forEach(r=>{r.removeAttribute('data-custo');r.removeAttribute('tabindex');r.className='obra'});
+  t.querySelectorAll('button').forEach(b=>b.remove());
+  const E=TODAS()?{}:(EMPRESAS[S.empresa]||{}),forma=S.custoVer==='forma';
+  janelaRelatorio({titulo:`Custo por obra${forma?' por forma de pagamento':''} · ${nomeEmp()} · ${MES_NOME}`,meta:`Valores em R$${det?' · por obra e funcionário':' · por obra'}`,logo:E.logo,deitado:true,
+    tabela:`<style>tr.obra td{font-weight:700;background:#f2f2f2}tr.custo-fh th{font-size:8.5px;color:#555;border-bottom:1px solid #999}tr.custo-fh th:first-child,tr.custo-f td:first-child{padding-left:14px}tr.custo-f td{font-size:10px}.tag,.emp-chip{font-size:8px;border:1px solid #999;border-radius:3px;padding:0 3px;margin-left:3px}.hint{color:#555}</style>${t.outerHTML}`,
+    nota:lg.join(' ')});
 }
 function renderCusto(){
   const fs=visiveis(),obras={};let algumEst=false;
@@ -1151,14 +1164,14 @@ function renderCusto(){
   const num=v=>v?nfmt2(v):'—';
   // só as colunas com algum valor no mês aparecem (as vazias ficam escondidas para a tabela caber na tela)
   const cols=lista.length?CUSTO_COLS.filter(([c2])=>Math.abs(tot[c2]||0)>.004):CUSTO_COLS,ocultas=CUSTO_COLS.length-cols.length;
-  const ver=`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn${S.custoVer!=='forma'?' primary':''}" data-custover="tipo">Por tipo de custo</button><button class="btn${S.custoVer==='forma'?' primary':''}" data-custover="forma">Por forma de pagamento</button></span>`;
+  const ver=`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-custoimp="resumo">Imprimir</button><button class="btn" data-custoimp="det">Imprimir com funcionários</button><button class="btn${S.custoVer!=='forma'?' primary':''}" data-custover="tipo">Por tipo de custo</button><button class="btn${S.custoVer==='forma'?' primary':''}" data-custover="forma">Por forma de pagamento</button></span>`;
   if(S.custoVer==='forma'){$('#view').innerHTML=`<section class="panel"><div class="panel-head"><h2>Custo por obra · ${nomeEmp()} · ${MES_NOME}</h2>${ver}<span class="hint">Valores em R$, pela forma em que foram pagos. Clique numa obra para ver por funcionário.</span></div>${renderCustoForma(fs,parte,nomeK)}</section>`;return}
   let h=`<section class="panel"><div class="panel-head"><h2>Custo por obra · ${nomeEmp()} · ${MES_NOME}</h2>${ver}<span class="hint">Valores em R$. Clique numa obra para ver o custo por funcionário.${ocultas?` ${ocultas} coluna(s) sem valor no mês escondida(s).`:""}</span></div>
     <div class="scroller"><table class="ben custo"><thead><tr><th>Obra</th><th>Funcionários</th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
   if(!lista.length)h+=`<tr><td colspan="${cols.length+4}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
   for(const [k,o] of lista){
     h+=`<tr class="row ${empCls(k)}-bar" data-custo="${esc(k)}" tabindex="0"><td><b>${esc(nomeK(k))}</b>${OBRAS[k]?` <span class="emp-chip ${empCls(k)}" style="font-size:10px;padding:1px 6px">${OBRAS[k].empresa}</span>`:''}</td><td>${o.func.length}</td><td>${nfmt(o.dias)}</td>${cols.map(([c2])=>`<td>${num(o[c2])}</td>`).join('')}<td><b>${nfmt2(o.tot)}</b></td></tr>`;
-    if(S.custoAberto===k)h+=`<tr class="custo-fh"><th>Funcionário</th><th></th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr>
+    if(S.custoAberto===k||S.custoTodos)h+=`<tr class="custo-fh"><th>Funcionário</th><th></th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr>
       ${o.func.sort((a,b)=>b.t-a.t).map(x=>`<tr class="custo-f"><td>${esc(x.f.nome)}${selo(x.f)}${x.est?' <span class="tag">benefícios estimados</span>':''}${x.estSal?' <span class="tag">salário estimado</span>':''}</td><td></td><td>${nfmt(x.v.dias)}</td>${cols.map(([c2])=>`<td>${num(x.v[c2])}${(c2==='sal1'||c2==='sal2')&&x.v[c2]&&porPrazo(x.f)?(()=>{const qx=S.qf[c2==='sal1'?1:2]?.[x.f.id];return qx?`<br><span class="hint">${esc(String(qx.quando||'').slice(0,5))} · ${formaQ(qx)||'espécie'}</span>`:''})():''}${(c2==='sal1'||c2==='sal2')&&x.v[c2]&&!x.estSal&&!porPrazo(x.f)?(()=>{const pi=pagInfo(x.f,c2==='sal1'?'q1':'q2');const q=c2==='sal1'?'q1':'q2',od=(S.folha?.[x.f.id]?.extras||[]).filter(y=>y.q===q);return `<br><span class="hint">${pi.data?pi.data.slice(0,5):'sem data'} · ${pi.conta?esc(pi.conta):'sem conta'}</span>${od.map(y=>`<br><span class="hint">${brl(y.valor)} em ${esc(y.data.slice(0,5))}${y.conta?' · '+esc(y.conta):''}</span>`).join('')}`})():''}</td>`).join('')}<td><b>${nfmt2(x.t)}</b></td></tr>`).join('')}`;
   }
   h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${cols.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}<td>${nfmt2(tot.tot)}</td></tr></tfoot></table></div>
@@ -2937,6 +2950,7 @@ $('#view').addEventListener('click',e=>{
     registrar(`Adiantamento auxílio-transporte · ${f.nome}`,'—',`${brl(a.total)} · ${a.lista} de ${dd(a.de)} a ${dd(NDIAS)}`,'Emitido (entrada no mês)');render();mostrarAdiant(f,'adiant');return}
   if(gcr){const f=byId(gcr.dataset.gerarcestareg);
     f.cestaReg={de:diaEntrada(f),comp:COMP};registrar(`Cesta básica · ${f.nome}`,'—',`Recibo referente a ${MES_NOME}`,'Emitido (cesta do registro)');render();mostrarAdiant(f,'cesta');return}
+  const ci=e.target.closest('[data-custoimp]');if(ci)return imprimirCusto(ci.dataset.custoimp==='det');
   const cv=e.target.closest('[data-custover]');if(cv){S.custoVer=cv.dataset.custover;return render()}
   const cu=e.target.closest('[data-custo]');if(cu){S.custoAberto=S.custoAberto===cu.dataset.custo?null:cu.dataset.custo;return render()}
   const vcr=e.target.closest('[data-vercestareg]');if(vcr)return mostrarAdiant(byId(vcr.dataset.vercestareg),'cesta');
