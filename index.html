@@ -1342,9 +1342,25 @@ function renderStatus(){
    ${dv?`<span class="chip warn">${dv} avulso(s) com dias trabalhados ≠ diárias</span>`:''}
    ${nf?bt('fech','ok',`${nf} de ${funcsEmp().length} funcionários fechados`):''}
    ${nl?bt('teste','bad',`${nl} funcionário(s) no limite do período de teste: registrar`):''}
+   ${(()=>{const n=funcsEmp().filter(ausAlerta).length;return n?bt('aus','warn',`${n} funcionário(s) com muitas faltas ou atestados`,`${AUS_LIM.F} ou mais faltas, ou ${AUS_LIM.AT} ou mais atestados, nos últimos ${AUS_DIAS} dias. Clique para ver de quem é`):''})()}
    ${(()=>{const n=S.perfil==='dp'?lembAvisar(funcsEmp()).length:0;return n?`<button class="chip warn" data-golemb="1" title="Ver os lembretes do acordo">${n} lembrete(s) de acordo para revisar</button>`:''})()}
    ${S.perfil==='gestor'?'<span class="chip">Vendo só a equipe lotada no Residencial Ipê</span>':''}${painelStatus()}`;
 }
+// ---------- Alerta de muitas faltas ou atestados (últimos 90 dias, juntando os meses) ----------
+const AUS_LIM={F:3,AT:3},AUS_DIAS=90;
+function ausencias90(f){
+  const h=new Date();h.setHours(0,0,0,0);const fimComp=new Date(ANO,MES+1,0),ref=h<fimComp?h:fimComp,ini=new Date(ref);ini.setDate(ini.getDate()-(AUS_DIAS-1));
+  const F=[],AT=[];
+  for(let k=new Date(ini.getFullYear(),ini.getMonth(),1);k<=ref;k=new Date(k.getFullYear(),k.getMonth()+1,1)){
+    const ck=k.getFullYear()+'-'+String(k.getMonth()+1).padStart(2,'0'),pt=(ck===COMP?S.ponto:S.comps?.[ck]?.ponto)?.[f.id];if(!pt)continue;
+    for(const d in pt){const dt=new Date(k.getFullYear(),k.getMonth(),+d);if(dt<ini||dt>ref)continue;const c=pt[d]?.c;if(c==='F')F.push(dt);else if(c==='AT')AT.push(dt)}}
+  F.sort((a,b)=>a-b);AT.sort((a,b)=>a-b);
+  // atestado: dias seguidos (ou separados só por fim de semana) contam como um atestado só
+  const runs=[];for(const d of AT){const u=runs[runs.length-1];if(u){let x=new Date(u[1]);x.setDate(x.getDate()+1);while(x<d&&(x.getDay()===0||x.getDay()===6))x.setDate(x.getDate()+1);if(+x===+d){u[1]=d;continue}}runs.push([d,d])}
+  return {F,AT,runs,ini,ref};
+}
+const ausAlerta=f=>{const a=ausencias90(f);return a.F.length>=AUS_LIM.F||a.runs.length>=AUS_LIM.AT?a:null};
+const dm=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
 // dias seguidos viram faixa ("03/08 a 07/08"); fim de semana e feriado no meio não quebram a faixa
 function faixasDias(ds){
   const s=[...ds].sort((a,b)=>a-b),out=[];let i=0;
@@ -1362,6 +1378,13 @@ function painelStatus(){
     corpo=[...por].sort((a,b)=>b[1].length-a[1].length||a[0].nome.localeCompare(b[0].nome)).map(([f,ds])=>`<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${ds.length} dia(s): ${faixasDias(ds)}</span></span><button class="btn" data-stcal="${f.id}">Abrir calendário</button></div>`).join('')}
   else if(k==='teste'){const fs=funcsEmp().filter(noLimite);tit=`No limite do período de teste (${LIMITE_TESTE} dias) · ${fs.length} funcionário(s)`;
     corpo=fs.map(f=>`<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${esc(f.funcao)} · ${nfmt(diasTeste(f))} dia(s) de teste desde ${esc(f.adm)}</span></span>${dp?`<span style="display:flex;gap:6px"><button class="btn primary" data-streg="${f.id}">Registrar</button><button class="btn" data-stficha="${f.id}">Abrir ficha</button></span>`:''}</div>`).join('')}
+  else if(k==='aus'){const ls=funcsEmp().map(f=>({f,a:ausAlerta(f)})).filter(x=>x.a).sort((x,y)=>(y.a.F.length+y.a.runs.length)-(x.a.F.length+x.a.runs.length)||x.f.nome.localeCompare(y.f.nome));
+    const a0=ls[0]?.a;tit=`Muitas faltas ou atestados nos últimos ${AUS_DIAS} dias${a0?` (${dm(a0.ini)} a ${dm(a0.ref)})`:''} · ${ls.length} funcionário(s)`;
+    corpo=ls.map(({f,a})=>{const fl=a.F.length,at=a.runs.length,dAt=a.AT.length;
+      return `<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${esc(f.funcao)}</span><br>
+        <span class="hint">${fl?`<b style="color:${fl>=AUS_LIM.F?'var(--bad)':'inherit'}">${fl} falta(s)</b>: ${a.F.map(dm).join(', ')}`:'nenhuma falta'}${at?` · <b style="color:${at>=AUS_LIM.AT?'var(--bad)':'inherit'}">${at} atestado(s)</b> (${dAt} dia(s)): ${a.runs.map(r=>+r[0]===+r[1]?dm(r[0]):dm(r[0])+' a '+dm(r[1])).join(', ')}`:''}</span></span>
+        <span style="display:flex;gap:6px"><button class="btn" data-stcal="${f.id}">Abrir calendário</button>${dp?`<button class="btn" data-stficha="${f.id}">Abrir ficha</button>`:''}</span></div>`}).join('')
+      +`<p class="hint" style="margin:6px 0 0">Aparece quem tem ${AUS_LIM.F} ou mais faltas (F) ou ${AUS_LIM.AT} ou mais atestados (AT) nos últimos ${AUS_DIAS} dias, juntando os meses. Atestado de vários dias seguidos conta como um.</p>`}
   else if(k==='nv'){const quem=t=>funcsEmp().filter(f=>Object.values(S.ponto[f.id]||{}).some(r=>CODES[r.c].trab&&norm(r.o)===norm(t))).map(f=>f.nome);
     const ls=naoVinculadas();tit=`Nomes de obra digitados que o sistema não reconheceu · ${ls.length}`;
     corpo=ls.map(x=>`<div class="st-linha"><span><code>${esc(x.texto)}</code> <span class="hint">· ${x.n} dia(s) · ${quem(x.texto).map(esc).join(', ')}</span></span></div>`).join('')+(dp?`<div class="actions" style="margin:6px 0 0"><button class="btn primary" data-stvinc="1">Vincular na aba Fechamento</button></div>`:'')}
