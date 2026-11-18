@@ -1085,50 +1085,53 @@ function custoFunc(f,guia=0){
 }
 // ---------- Custo por obra por forma de pagamento ----------
 // cada item do custo (custoFunc) vai para a forma em que foi pago, na mesma proporção por obra
-const FORMA_COLS=[['esp','Espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard'],['banco','Conta bancária'],['cesta','Cesta básica'],['guias','INSS/FGTS'],['def','A definir']];
+const FORMA_COLS=[['esp','Espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard'],['banco','Conta bancária'],['cesta','Cesta básica'],['guias','INSS/FGTS'],['def','Previsto (a pagar)']];
 function custoForma(f,guia=0){
   const c=custoFunc(f,guia),z=()=>({esp:0,alim:0,livre:0,natal:0,banco:0,cesta:0,guias:0,def:0});
   // proporção de cada forma num fechamento do mês (benefícios): cartões guardados no fechamento, o resto em espécie
   const deFech=fe=>{if(!fe)return null;const al=fe.alelo||{},a=+fe.aux||0;if(!(a>0))return null;const r={alim:(+al.alim||0)/a,livre:(+al.livre||0)/a,natal:(+al.natal||0)/a};r.esp=Math.max(0,1-r.alim-r.livre-r.natal);return r};
   const contaEsp=/esp[eé]cie/i.test(f.conta||'');
   // o que ainda não foi pago vai para a forma prevista (acordo, ou Alelo sugerido do avulso por prazo) e marca "previsto"
-  let prev=false;const P=r=>{prev=true;return r};
+  // só o que foi pago vai para as colunas de forma; o que ainda vai ser pago vai para "Previsto (a pagar)"
+  let prev=false;const P=()=>{prev=true;return {def:1}};
   const dest=k=>{const d=(acordo(f).pg||{})[k==='transp'?'tarifa':k];return d==='alim'||d==='livre'||d==='natal'?d:'esp'};
   const rq=q=>{if(porPrazo(f)){const x=S.qf[q]?.[f.id];if(!x){const vq=valorQ(f,q),b=brutoQ(vq)||0,sg=aleloSug(f,q,vq);if(!(b>0))return P({esp:1});return P({alim:sg.alim/b,livre:sg.livre/b,esp:Math.max(0,1-(sg.alim+sg.livre)/b)})}const b=brutoQ(x)||0,pa=alPartes(x);if(!(b>0))return {esp:1};return {alim:pa.alim/b,livre:pa.livre/b,esp:Math.max(0,1-(pa.alim+pa.livre)/b)}}return contaEsp?{esp:1}:{banco:1}};
   const pv=S.comps?.[prevKey()]?.fechF?.[f.id],entrada=diaEntrada(f)&&f.adiantQuando;
   // cada benefício pela forma em que ele foi pago no fechamento (não a média do fechamento todo)
   const doItem=(fe,comp,k)=>{if(!fe)return null;const b=benFormas(fe,pgDoFech(f,fe,comp))[k],t=b?b.esp+b.alim+b.livre+b.natal:0;if(!(t>0))return deFech(fe);return {esp:b.esp/t,alim:b.alim/t,livre:b.livre/t,natal:b.natal/t}};
   const rBen=k=>entrada?{esp:1}:(doItem(pv,prevKey(),k)||P({[dest(k)]:1})),rBonif=doItem(S.fechF[f.id],COMP,'bonif')||P({[dest('bonif')]:1});
-  const R={diarias:{esp:1},sal1:rq(1),sal2:rq(2),insal:{banco:1},peric:{banco:1},bonif:rBonif,ajuda:rBen('ajuda'),cafe:rBen('cafe'),alim:rBen('alim'),transp:rBen('transp'),cesta:{cesta:1},guias:{guias:1}};
+  // diárias: pagas (espécie) só as das quinzenas já fechadas
+  const rDia=(()=>{if(porPrazo(f)||!temAvulso(f))return {esp:1};let pago=0,tot=0;for(const q of [1,2]){const x=S.qf[q]?.[f.id],b=x?brutoQ(x):valorQ(f,q).bruto;tot+=b||0;if(x)pago+=b||0}
+    if(!(tot>0))return {esp:1};if(pago>=tot-.004)return {esp:1};prev=true;return {esp:pago/tot,def:1-pago/tot}})();
+  const R={diarias:rDia,sal1:rq(1),sal2:rq(2),insal:{banco:1},peric:{banco:1},bonif:rBonif,ajuda:rBen('ajuda'),cafe:rBen('cafe'),alim:rBen('alim'),transp:rBen('transp'),cesta:c.est?P():{cesta:1},guias:{guias:1}};
   const out={};
   for(const [k,v] of Object.entries(c.out)){const o=out[k]=z();o.dias=v.dias;
     for(const [item] of CUSTO_COLS){const val=+v[item]||0;if(!val)continue;for(const [fm,p] of Object.entries(R[item]||{def:1}))o[fm]+=val*p}}
-  // só conta como "previsto" se algum valor previsto entrou de fato no custo
-  const usou=prev&&Object.values(c.out).some(v=>(!S.fechF[f.id]&&(+v.bonif||0)>0)||(!entrada&&!pv&&['ajuda','cafe','alim','transp'].some(k=>(+v[k]||0)>0))||(porPrazo(f)&&((!S.qf[1]?.[f.id]&&v.sal1)||(!S.qf[2]?.[f.id]&&v.sal2))));
-  return {out,est:c.est,prev:usou};
+  return {out,est:c.est};
 }
 function renderCustoForma(fs,parte,nomeK){
   const obras={};
-  let algumPrev=false;
-  for(const f of fs){const {out,prev}=custoForma(f,parte[f.id]||0);
-    for(const [k,v] of Object.entries(out)){const o=obras[k]=obras[k]||{dias:0,func:[],tot:0};o.dias+=v.dias;let t=0;for(const [c2] of FORMA_COLS){o[c2]=(o[c2]||0)+v[c2];t+=v[c2]}o.tot+=t;o.func.push({f,v,t,prev});if(prev)algumPrev=true}}
+  for(const f of fs){const {out}=custoForma(f,parte[f.id]||0);
+    for(const [k,v] of Object.entries(out)){const o=obras[k]=obras[k]||{dias:0,func:[],tot:0};o.dias+=v.dias;let t=0;for(const [c2] of FORMA_COLS){o[c2]=(o[c2]||0)+v[c2];t+=v[c2]}o.tot+=t;o.func.push({f,v,t})}}
   const lista=Object.entries(obras).sort((a,b)=>b[1].tot-a[1].tot),tot={dias:0,tot:0};
   for(const [,o] of lista){tot.dias+=o.dias;tot.tot+=o.tot;for(const [c2] of FORMA_COLS)tot[c2]=(tot[c2]||0)+o[c2]}
   const num=v=>Math.abs(v)>.004?nfmt2(v):'—',cols=lista.length?FORMA_COLS.filter(([c2])=>Math.abs(tot[c2]||0)>.004):FORMA_COLS;
-  let h=`<div class="scroller"><table class="ben custo"><thead><tr><th>Obra</th><th>Funcionários</th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`;
-  if(!lista.length)h+=`<tr><td colspan="${cols.length+4}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
+  // "Total pago" (sem o previsto) aparece quando há algo previsto
+  const temPrev=Math.abs(tot.def||0)>.004,pagoTd=(t,d,b)=>temPrev?`<td>${b?'<b>':''}${nfmt2(t-(d||0))}${b?'</b>':''}</td>`:'';
+  const cab=`${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}${temPrev?'<th>Total pago</th>':''}<th>Total${temPrev?' com previsto':''}</th>`;
+  let h=`<div class="scroller"><table class="ben custo"><thead><tr><th>Obra</th><th>Funcionários</th><th>Dias</th>${cab}</tr></thead><tbody>`;
+  if(!lista.length)h+=`<tr><td colspan="${cols.length+5}" class="hint" style="text-align:left">Nenhum dia trabalhado lançado neste mês.</td></tr>`;
   for(const [k,o] of lista){
-    h+=`<tr class="row ${empCls(k)}-bar" data-custo="${esc(k)}" tabindex="0"><td><b>${esc(nomeK(k))}</b>${OBRAS[k]?` <span class="emp-chip ${empCls(k)}" style="font-size:10px;padding:1px 6px">${OBRAS[k].empresa}</span>`:''}</td><td>${o.func.length}</td><td>${nfmt(o.dias)}</td>${cols.map(([c2])=>`<td>${num(o[c2])}</td>`).join('')}<td><b>${nfmt2(o.tot)}</b></td></tr>`;
-    if(S.custoAberto===k)h+=`<tr class="custo-fh"><th>Funcionário</th><th></th><th>Dias</th>${cols.map(c2=>`<th>${c2[1]}</th>`).join('')}<th>Total</th></tr>
-      ${o.func.sort((a,b)=>b.t-a.t).map(x=>`<tr class="custo-f"><td>${esc(x.f.nome)}${selo(x.f)}${x.f.conta&&x.v.banco>.004?` <span class="hint">${esc(x.f.conta)}</span>`:''}${x.prev?' <span class="tag">previsto</span>':''}</td><td></td><td>${nfmt(x.v.dias)}</td>${cols.map(([c2])=>`<td>${num(x.v[c2])}</td>`).join('')}<td><b>${nfmt2(x.t)}</b></td></tr>`).join('')}`;
+    h+=`<tr class="row ${empCls(k)}-bar" data-custo="${esc(k)}" tabindex="0"><td><b>${esc(nomeK(k))}</b>${OBRAS[k]?` <span class="emp-chip ${empCls(k)}" style="font-size:10px;padding:1px 6px">${OBRAS[k].empresa}</span>`:''}</td><td>${o.func.length}</td><td>${nfmt(o.dias)}</td>${cols.map(([c2])=>`<td>${num(o[c2])}</td>`).join('')}${pagoTd(o.tot,o.def,true)}<td>${temPrev?'':'<b>'}${nfmt2(o.tot)}${temPrev?'':'</b>'}</td></tr>`;
+    if(S.custoAberto===k)h+=`<tr class="custo-fh"><th>Funcionário</th><th></th><th>Dias</th>${cab}</tr>
+      ${o.func.sort((a,b)=>b.t-a.t).map(x=>`<tr class="custo-f"><td>${esc(x.f.nome)}${selo(x.f)}${x.f.conta&&x.v.banco>.004?` <span class="hint">${esc(x.f.conta)}</span>`:''}</td><td></td><td>${nfmt(x.v.dias)}</td>${cols.map(([c2])=>`<td>${num(x.v[c2])}</td>`).join('')}${pagoTd(x.t,x.v.def,true)}<td>${temPrev?'':'<b>'}${nfmt2(x.t)}${temPrev?'':'</b>'}</td></tr>`).join('')}`;
   }
-  h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${cols.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}<td>${nfmt2(tot.tot)}</td></tr></tfoot></table></div>
+  h+=`</tbody><tfoot><tr><td>Total</td><td></td><td>${nfmt(tot.dias)}</td>${cols.map(([c2])=>`<td>${num(tot[c2])}</td>`).join('')}${pagoTd(tot.tot,tot.def)}<td>${nfmt2(tot.tot)}</td></tr></tfoot></table></div>
     <div class="legend"><span>Os mesmos valores do custo por tipo, separados pela forma em que foram pagos, na proporção dos dias em cada obra.</span>
     <span>Espécie: diárias de avulsos, parte em dinheiro do avulso por prazo e dos fechamentos, adiantamento de entrada, e salário de quem recebe pela conta "Espécie".</span>
     <span>Alelo Alimentação, Alelo Saldo Livre e NatalCard: o que foi para cada cartão no fechamento do mês (benefícios) e, no avulso por prazo, ao fechar cada quinzena.</span>
     <span>Conta bancária: salário da folha importada, pela conta escolhida do funcionário na aba Salários.</span>
-    ${algumPrev?'<span><span class="tag">previsto</span> parte dos valores ainda não foi paga (bonificação do mês ainda não fechado, benefícios sem o fechamento do mês anterior ou quinzena aberta do avulso por prazo): aparece na forma do acordo do funcionário (ou no Alelo sugerido) até ser paga.</span>':''}
-    ${Math.abs(tot.def||0)>.004?'<span>A definir: valores sem forma conhecida.</span>':''}</div>`;
+    ${temPrev?`<span>Previsto (a pagar): entra no custo do mês, mas ainda não foi pago: bonificação do mês ainda não fechado, benefícios e cesta sem o fechamento do mês anterior (estimados pelo acordo), diárias e salário do avulso por prazo de quinzena ainda aberta. Ao pagar, o valor sai daqui e vai para a coluna da forma em que foi pago.</span><span>Total pago: só o que já saiu. Total com previsto: o custo do mês, igual ao da visão por tipo.</span>`:''}</div>`;
   return h;
 }
 function renderCusto(){
