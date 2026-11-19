@@ -805,7 +805,7 @@ function renderSalarios(){
             else{const vq=valorQ(f,qn),sg=aleloSug(f,qn,vq),v=modo!=='esp'?sg[modo]:r2(vq.valor-sg.alim-sg.livre);if(v>0)add(ab,f,v,'')}}
           const a=f.adiantAv;if(modo==='esp'&&a&&a.comp===COMP&&((lerData(a.data)?.getDate()||1)<=15)===(q==='q1'))add(pd[a.data]=pd[a.data]||{v:0,ls:[]},f,a.valor,'adiantamento');
           // recibo de entrada (auxílio-transporte dos dias restantes de quem foi registrado no mês): em espécie
-          const ad=calcAdiant(f);if(modo==='esp'&&ad&&ad.total>0&&f.adiantQuando&&comoMens(f)){const d=String(f.adiantQuando).split(' ')[0];if(qDaData(d)===qn)add(pd[d]=pd[d]||{v:0,ls:[]},f,ad.total,'auxílio de entrada')}
+          const ad=calcAdiant(f);if(ad&&ad.total>0&&f.adiantQuando&&comoMens(f)){const d=String(f.adiantQuando).split(' ')[0],v=entradaFormas(f,ad)[modo]||0;if(v>0&&qDaData(d)===qn)add(pd[d]=pd[d]||{v:0,ls:[]},f,v,'auxílio de entrada')}
           // fechamento do mês (benefícios): a parte em espécie e a de cada cartão Alelo
           const fe=S.fechF[f.id];if(fe&&fe.aux!=null){const d=String(fe.quando||'').split(' ')[0];if(qDaData(d)===qn){
             const v=modo==='esp'?(fe.especie!=null?+fe.especie:(+fe.aux||0)-aleloSoma(fe.alelo)):(+fe.alelo?.[modo]||0);if(v>0)add(pd[d]=pd[d]||{v:0,ls:[]},f,r2(v),'fechamento')}}}
@@ -992,10 +992,10 @@ function importarSalarios(d){
 const FORMAS_PAG=[['esp','Espécie'],['alim','Alelo Alimentação'],['livre','Alelo Saldo Livre'],['natal','NatalCard'],['cesta','Cesta básica']];
 function pagamentosDe(f){
   const fe=S.fechF[f.id],a=calcAdiant(f),r={adi:0,dia:0,auxEsp:0,alim:0,livre:0,natal:0,cesta:0};
-  if(a&&a.total>0&&f.adiantQuando&&comoMens(f))r.adi=a.total;
+  if(a&&a.total>0&&f.adiantQuando&&comoMens(f)){const ef=entradaFormas(f,a);r.adi=ef.esp;r.alim+=ef.alim;r.livre+=ef.livre;r.natal+=ef.natal}
   if(f.adiantAv?.comp===COMP)r.adi+=f.adiantAv.valor;
   for(const q of [1,2]){const x=S.qf[q]?.[f.id];if(!x)continue;const pa=alPartes(x);r.dia+=(+x.valor||0)-pa.alim-pa.livre;r.alim+=pa.alim;r.livre+=pa.livre}
-  if(fe){r.alim=+fe.alelo?.alim||0;r.livre=+fe.alelo?.livre||0;r.natal=+fe.alelo?.natal||0;
+  if(fe){r.alim+=+fe.alelo?.alim||0;r.livre+=+fe.alelo?.livre||0;r.natal+=+fe.alelo?.natal||0;
     r.auxEsp=Math.max(0,fe.especie!=null?+fe.especie:(+fe.aux||0)-aleloSoma(fe.alelo));
     if(fe.cesta)r.cesta+=fe.cestaValor!=null?+fe.cestaValor:valorCesta(f)}
   if(temCestaReg(f))r.cesta+=valorCesta(f);
@@ -1106,7 +1106,7 @@ function custoForma(f,guia=0){
   const pv=S.comps?.[prevKey()]?.fechF?.[f.id],entrada=diaEntrada(f)&&f.adiantQuando;
   // cada benefício pela forma em que ele foi pago no fechamento (não a média do fechamento todo)
   const doItem=(fe,comp,k)=>{if(!fe)return null;const b=benFormas(fe,pgDoFech(f,fe,comp))[k],t=b?b.esp+b.alim+b.livre+b.natal:0;if(!(t>0))return deFech(fe);return {esp:b.esp/t,alim:b.alim/t,livre:b.livre/t,natal:b.natal/t}};
-  const rBen=k=>entrada?{esp:1}:(doItem(pv,prevKey(),k)||P({[dest(k)]:1})),rBonif=doItem(S.fechF[f.id],COMP,'bonif')||P({[dest('bonif')]:1});
+  const rBen=k=>entrada?{[dest(k)]:1}:(doItem(pv,prevKey(),k)||P({[dest(k)]:1})),rBonif=doItem(S.fechF[f.id],COMP,'bonif')||P({[dest('bonif')]:1});
   // diárias: pagas (espécie) só as das quinzenas já fechadas
   const rDia=(()=>{if(porPrazo(f)||!temAvulso(f))return {esp:1};let pago=0,tot=0;for(const q of [1,2]){const x=S.qf[q]?.[f.id],b=x?brutoQ(x):valorQ(f,q).bruto;tot+=b||0;if(x)pago+=b||0}
     if(!(tot>0))return {esp:1};if(pago>=tot-.004)return {esp:1};prev=true;return {esp:pago/tot,def:1-pago/tot}})();
@@ -2439,7 +2439,7 @@ function reciboHTML(f,tipo,rec){
     dias=`Empresa: ${esc((EMPRESAS[emp]||{}).razao||emp)}`;
   } else if(tipo==='adiant'){
     const a=calcAdiant(f);valor=a.total;titulo='Recibo de auxílio-transporte';
-    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente ao auxílio-transporte do período <b>${dd(a.de)} a ${dd(NDIAS)}/${ANO}</b>.`;
+    texto=`Recebi da empresa <b>${esc((EMPRESAS[emp]||{}).razao||emp)}</b> a importância de <b>${brl(valor)}</b> (${extenso(valor)}), referente ao auxílio-transporte do período <b>${dd(a.de)} a ${dd(NDIAS)}/${ANO}</b>${(()=>{const ef=entradaFormas(f,a),ps=[['natal','creditados no NatalCard'],['alim','creditados no Alelo Alimentação'],['livre','creditados no Alelo Saldo Livre']].filter(([k])=>ef[k]>0);return ps.length?`, sendo ${ps.map(([k,t])=>`<b>${brl(ef[k])}</b> ${t}`).join(', ')}${ef.esp>0?` e <b>${brl(ef.esp)}</b> em espécie`:''}`:''})()}.`;
     dias=`Dias úteis considerados: ${a.dias} (de ${dd(a.de)} a ${dd(NDIAS)}) · Obra: ${esc(OBRAS[lotacao(f,a.de)].nome)}`;
     if(S.recDetalhe)detalhe=a.itens.map(x=>`<tr><td>${x.nome} · ${x.f}</td><td>${brl(x.valor)}</td></tr>`).join('');
   } else if(tipo==='diarias'){
@@ -2698,6 +2698,9 @@ function calcAdiant(f){
   const por=Object.fromEntries(it.map(x=>[x.k,x.valor]));
   return {de,dias,itens:it,por,total:it.reduce((a,x)=>a+x.valor,0),lista:it.map(x=>x.nome.toLowerCase()).join(', ').replace(/, ([^,]*)$/,' e $1')};
 }
+// forma de cada item do recibo de entrada, pela forma do acordo (ex.: passagens no NatalCard); sem forma = espécie
+function entradaFormas(f,a=calcAdiant(f)){const r={esp:0,alim:0,livre:0,natal:0};if(!a)return r;const pg=acordo(f).pg||{};
+  for(const x of a.itens){const d=pg[x.k==='transp'?'tarifa':x.k];r[d==='alim'||d==='livre'||d==='natal'?d:'esp']+=x.valor}return r}
 const temCestaReg=f=>!!(f.cestaReg&&f.cestaReg.comp===COMP);
 function mostrarAdiant(f,modo){
   const a=calcAdiant(f),comAd=modo!=='cesta'&&a&&a.total>0&&f.adiantQuando,comCe=modo!=='adiant'&&temCestaReg(f);
