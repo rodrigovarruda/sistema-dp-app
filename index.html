@@ -61,6 +61,7 @@ textarea{resize:vertical;min-height:60px;width:100%}
 .conta-cel{display:inline-flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
 .conta-soma{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.2}
 .conta-outra{display:block;text-align:right;margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)}
+.conta-tot{display:block;text-align:right;margin-top:6px;padding-top:5px;border-top:2px solid var(--ink);font-weight:700}
 .custo-fh th{background:var(--surface-2);font-size:11px;padding-top:10px}.custo-f td{background:var(--surface-2);font-size:13px}table.custo tr.custo-f td:first-child,table.custo tr.custo-fh th:first-child{padding-left:24px}
 .esp-nomes{display:flex;flex-direction:column;align-items:flex-end;gap:1px;margin-top:2px;font-size:12px}.esp-nomes>span{white-space:nowrap}.esp-nomes .link-btn{font-size:12px}
 .rel-dia{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -801,7 +802,8 @@ function renderSalarios(){
       // pelo dia em que a quinzena foi fechada e paga; quinzena ainda aberta aparece como "a pagar"
       // com o nome e o valor de cada um, para conferir o dinheiro entregue
       // modo 'esp' = parte em espécie; modo 'alelo' = parte no cartão Alelo (quinzena aberta: o previsto pelo Alelo sugerido)
-      const avEsp=(q,modo='esp')=>{const pd={},ab={v:0,ls:[]},add=(o,f,v,o2)=>{o.v+=v;o.ls.push({f,v,o:o2})},qn=q==='q1'?1:2;
+      // extra = o que já saiu por esta conta fora dos avulsos (salário da folha e pagos em outra data), para o total da quinzena
+      const avEsp=(q,modo='esp',extra=0)=>{const pd={},ab={v:0,ls:[]},add=(o,f,v,o2)=>{o.v+=v;o.ls.push({f,v,o:o2})},qn=q==='q1'?1:2;
         // quinzena de um pagamento pela data: até o dia 15 da competência = 1ª; depois (ou no mês seguinte) = 2ª
         const qDaData=ds=>{const d=lerData(ds);if(!d)return 2;return d.getFullYear()*12+d.getMonth()>ANO*12+MES?2:d.getDate()<=15?1:2};
         for(const f of visiveis()){if(empresaDe(f)!==e)continue;
@@ -816,9 +818,11 @@ function renderSalarios(){
             const v=modo==='esp'?(fe.especie!=null?+fe.especie:(+fe.aux||0)-aleloSoma(fe.alelo)):(+fe.alelo?.[modo]||0);if(v>0)add(pd[d]=pd[d]||{v:0,ls:[]},f,r2(v),'fechamento')}}}
         const nomes=ls=>`<span class="esp-nomes">${ls.sort((a,b)=>a.f.nome.localeCompare(b.f.nome,'pt-BR')).map(x=>`<span><button class="link-btn" data-abrirfunc="${x.f.id}">${esc(x.f.nome)}</button> <b class="num">${brl(x.v)}</b>${x.o&&x.o!=='diárias'?` <span class="hint">(${x.o})</span>`:''}</span>`).join('')}</span>`;
         return Object.keys(pd).sort((a,b)=>lerData(a)-lerData(b)).map(d=>`<span class="conta-outra"><b class="num">${brl(r2(pd[d].v))}</b> <span class="hint">pago em ${esc(d)} · ${pd[d].ls.length} pagamento(s)</span></span>${nomes(pd[d].ls)}`).join('')
-          +(ab.v?`<span class="conta-outra"><b class="num">${brl(r2(ab.v))}</b> <span class="hint">a pagar · quinzena aberta · ${ab.ls.length} avulso(s)</span></span>${nomes(ab.ls)}`:'')};
+          +(ab.v?`<span class="conta-outra"><b class="num">${brl(r2(ab.v))}</b> <span class="hint">a pagar · quinzena aberta · ${ab.ls.length} avulso(s)</span></span>${nomes(ab.ls)}`:'')
+          +(()=>{const tp=r2(Object.values(pd).reduce((s,x)=>s+x.v,0)+extra);return tp>0||ab.v>0?`<span class="conta-tot">Total pago na quinzena: <b class="num">${brl(tp)}</b>${ab.v?`<br><span class="hint">a pagar: ${brl(r2(ab.v))}</span>`:''}</span>`:''})()};
+      const extraConta=(conta,q)=>{let v=tq(f=>(f.conta||'')===conta,q).v;for(const f of fs){if(empresaDe(f)!==e)continue;for(const x of S.folha[f.id]?.extras||[])if(x.q===q&&(x.conta||'')===conta)v+=+x.valor||0}return r2(v)};
       const ehEsp=c=>/esp[eé]cie/i.test(c),temEsp=contasDe(e).some(ehEsp);
-      const cel=(conta,q,campo)=>`<div class="conta-cel">${soma(tq(f=>(f.conta||'')===conta,q))}${campo}</div>${outras(conta,q)}${ehEsp(conta)?avEsp(q):''}`;
+      const cel=(conta,q,campo)=>`<div class="conta-cel">${soma(tq(f=>(f.conta||'')===conta,q))}${campo}</div>${outras(conta,q)}${ehEsp(conta)?avEsp(q,'esp',extraConta(conta,q)):''}`;
       const linhas=contasDe(e).map(c=>{const di=q=>cel(c,q,dp?`<input type="text" class="folha-in" data-pagdata="${e}|${esc(c)}|${q}" data-date="1" inputmode="numeric" value="${pagData(e,c,q)}" placeholder="DD/MM/AAAA" aria-label="Data de pagamento ${q==='q1'?'1ª':'2ª'} quinzena ${esc(c)}">`:(pagData(e,c,q)||'—'));
         return `<tr><td><span class="emp-chip emp-${e}">${e}</span> <b>${esc(c)}</b></td><td>${di('q1')}</td><td>${di('q2')}</td></tr>`});
       const sc1=tq(f=>!f.conta,'q1'),sc2=tq(f=>!f.conta,'q2'),os1=outras('','q1'),os2=outras('','q2');
