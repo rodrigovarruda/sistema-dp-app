@@ -113,7 +113,7 @@ th.we,td.we{background:var(--weekend)}
 .c-P{background:var(--ok-bg);color:var(--ok)} .c-M{background:var(--half-bg);color:var(--half)}
 .c-F{background:var(--bad-bg);color:var(--bad)} .c-FJ,.c-AT{background:var(--warn-bg);color:var(--warn)}
 .c-SU{background:var(--su-bg);color:var(--su)} .c-PE{background:var(--pe-bg);color:var(--pe)} .c-FE{background:var(--fe-bg);color:var(--fe)}
-.c-EA{background:var(--ea-bg);color:var(--ea)} .c-EP{background:var(--ep-bg);color:var(--ep)}
+.c-EA{background:var(--ea-bg);color:var(--ea)} .c-EP,.c-EF{background:var(--ep-bg);color:var(--ep)} .c-EF{outline:1px dashed var(--ep);outline-offset:-3px}
 .c-FO,.c-D,.c-X{background:var(--rest-bg);color:var(--rest)} .c-AV{background:var(--av-bg);color:var(--av)} .c-FT{background:var(--ft-bg);color:var(--ft)}
 td.tot{padding:0 8px;font-family:var(--f-data);font-weight:600;white-space:nowrap}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
@@ -439,17 +439,20 @@ const CODES={
   // exame periódico = conta como dia trabalhado na obra (recebe passagens e volta a trabalhar)
   EA:{s:'EA',l:'Exame admissional (ASO)',peso:0},
   EP:{s:'EP',l:'Exame periódico',peso:1,trab:true},
+  // exame de mudança de função: como o periódico (dia trabalhado) e também renova o exame periódico
+  EF:{s:'EF',l:'Exame de mudança de função',peso:1,trab:true},
   X:{s:'X',l:'Sábado, domingo, feriado ou falta justificada',peso:0}
 };
 // Elegibilidade aprovada pelo DP: só dias trabalhados contam (meio dia = 0,5)
-const ELEG={bonif:['P','M','EP'],ajuda:['P','M','EP'],cafe:['P','M','EP'],transp:['P','M','EP'],alim:['P','M','EP']};
+const ELEG={bonif:['P','M','EP','EF'],ajuda:['P','M','EP','EF'],cafe:['P','M','EP','EF'],transp:['P','M','EP','EF'],alim:['P','M','EP','EF']};
+const EXAME_TRAB=['EP','EF']; // exames que contam como dia trabalhado (a célula mostra a sigla do exame, não a da obra)
 const rotulo=r=>(r.c==='M'?'½ ':'')+r.o;
 // sigla da obra para a planilha do mês inteiro: iniciais das palavras (sem "de", "da"...), ou 3 letras se for uma palavra só
 const sigla=nome=>{const p=String(nome||'').split(/[\s\-\/]+/).filter(w=>w&&!/^(d[aeo]s?|e)$/i.test(w));
   return (p.length>1?p.slice(0,3).map(w=>w[0]).join(''):(p[0]||'').slice(0,3)).toUpperCase()};
 const rotuloCurto=r=>(r.c==='M'?'½':'')+sigla(OBRAS[resolve(r.o)]?.nome||r.o);
 const empCls=id=>id&&OBRAS[id]?'emp-'+OBRAS[id].empresa:'';
-const corDia=r=>r&&CODES[r.c]?.trab&&r.c!=='EP'?empCls(resolve(r.o)):'';
+const corDia=r=>r&&CODES[r.c]?.trab&&!EXAME_TRAB.includes(r.c)?empCls(resolve(r.o)):'';
 
 const OBRAS={
   ipe:{cod:'OB-014',nome:'Residencial Ipê',empresa:'CONARTE',cidade:'Cidade A',uf:'MG',resp:'Gestor Residencial Ipê',inicio:'03/02/2026',fim:'30/06/2027',status:'Em andamento'},
@@ -1412,7 +1415,7 @@ function ultimoExame(f){
   let ult=null,orig='';const ver=(d,o)=>{if(d&&(!ult||d>ult)){ult=d;orig=o}};
   const comps={...(S.comps||{}),[COMP]:{ponto:S.ponto}};
   for(const [ck,t] of Object.entries(comps)){const pt=t?.ponto?.[f.id];if(!pt)continue;const [a,m]=ck.split('-').map(Number);
-    for(const d in pt){const c=pt[d]?.c;if(c==='EP'||c==='EA')ver(new Date(a,m-1,+d),c==='EP'?'exame periódico':'exame admissional')}}
+    for(const d in pt){const c=pt[d]?.c;if(c==='EP'||c==='EA'||c==='EF')ver(new Date(a,m-1,+d),{EP:'exame periódico',EA:'exame admissional',EF:'exame de mudança de função'}[c])}}
   if(f.ultExame)ver(lerData(f.ultExame),'exame (informado na ficha)');
   return ult?{d:ult,orig}:null;
 }
@@ -1471,7 +1474,7 @@ function cellHTML(f,d){
   const pend=!r&&exigeDia(f,d)&&d<=ateOntem();
   const unl=r&&CODES[r.c].trab&&r.o&&!resolve(r.o);
   const title=`${f.nome} · ${WD_LONG[dow(d)]} ${dd(d)} · ${r?CODES[r.c].l+(r.o?' · '+r.o:'')+(r.obs?' · '+r.obs:''):'Não informado'}${can?'':' · sem permissão para editar'}`;
-  return `<td class="${we?'we':''}"><button class="cell ${r?'c-'+r.c:''} ${corDia(r)} ${pend?'pend':''} ${r&&r.obs?'has-obs':''}" data-f="${f.id}" data-d="${d}" ${can?'':'disabled'} title="${esc(title)}" aria-label="${esc(title)}">${r?(CODES[r.c].trab&&r.c!=='EP'?esc(S.planNomes?rotulo(r):rotuloCurto(r)):CODES[r.c].s):(pend?'·':'')}${unl?'<span class="dot"></span>':''}</button></td>`;
+  return `<td class="${we?'we':''}"><button class="cell ${r?'c-'+r.c:''} ${corDia(r)} ${pend?'pend':''} ${r&&r.obs?'has-obs':''}" data-f="${f.id}" data-d="${d}" ${can?'':'disabled'} title="${esc(title)}" aria-label="${esc(title)}">${r?(CODES[r.c].trab&&!EXAME_TRAB.includes(r.c)?esc(S.planNomes?rotulo(r):rotuloCurto(r)):CODES[r.c].s):(pend?'·':'')}${unl?'<span class="dot"></span>':''}</button></td>`;
 }
 function renderPlanilha(){
   // filtro por obra: lotados nela no fim do mês ou com algum dia trabalhado nela no mês
@@ -1496,7 +1499,7 @@ function renderPlanilha(){
   if(!S.planNomes){const usadas=new Map();
     for(const f of fs)for(const d in S.ponto[f.id]){const r=S.ponto[f.id][d];if(!CODES[r.c]?.trab)continue;const k=resolve(r.o),nome=OBRAS[k]?.nome||r.o;usadas.set(nome,{s:sigla(nome),cls:empCls(k)})}
     if(usadas.size)siglas=`<div class="legend"><b>Siglas:</b>${[...usadas].sort((a,b)=>a[1].s.localeCompare(b[1].s)).map(([n,x])=>`<span><i class="c-P ${x.cls}">${esc(x.s)}</i>${esc(n)}</span>`).join('')}</div>`}
-  h+=`</tbody></table></div>${siglas}<div class="legend"><span><i class="c-P emp-CONARTE">Obra da CONARTE</i></span><span><i class="c-P emp-ENGEVAC">Obra da ENGEVAC</i></span><span><i class="c-P emp-CIENG">Obra da CIENG</i></span><span><i class="c-P">Obra não vinculada</i></span><span><i class="c-M">½ Obra</i>Meio dia</span><span><i class="c-F">F</i>Falta não justificada</span><span><i class="c-AT">AT</i>Atestado médico</span><span><i class="c-SU">SU</i>Suspensão</span><span><i class="c-PE">PE</i>Perícia (INSS)</span><span><i class="c-FE">FE</i>Férias</span><span><i class="c-EA">EA</i>Exame admissional (ASO)</span><span><i class="c-EP">EP</i>Exame periódico (conta como trabalhado)</span><span><i class="c-X">X</i>Sábado, domingo, feriado ou falta justificada (motivo na observação)</span>
+  h+=`</tbody></table></div>${siglas}<div class="legend"><span><i class="c-P emp-CONARTE">Obra da CONARTE</i></span><span><i class="c-P emp-ENGEVAC">Obra da ENGEVAC</i></span><span><i class="c-P emp-CIENG">Obra da CIENG</i></span><span><i class="c-P">Obra não vinculada</i></span><span><i class="c-M">½ Obra</i>Meio dia</span><span><i class="c-F">F</i>Falta não justificada</span><span><i class="c-AT">AT</i>Atestado médico</span><span><i class="c-SU">SU</i>Suspensão</span><span><i class="c-PE">PE</i>Perícia (INSS)</span><span><i class="c-FE">FE</i>Férias</span><span><i class="c-EA">EA</i>Exame admissional (ASO)</span><span><i class="c-EP">EP</i>Exame periódico (conta como trabalhado)</span><span><i class="c-EF">EF</i>Exame de mudança de função (conta como trabalhado)</span><span><i class="c-X">X</i>Sábado, domingo, feriado ou falta justificada (motivo na observação)</span>
     <span><i class="cell pend" style="width:auto;height:auto;display:inline-block;padding:1px 6px">·</i>Dia obrigatório sem lançamento</span>
     <span><i style="background:var(--accent);width:8px;height:8px;border-radius:50%;padding:0"></i>Nome de obra a vincular</span></div></section>`;
   // a planilha tem rolagem própria: mantém a posição ao lançar um dia
@@ -1811,9 +1814,9 @@ function renderCad(){
     <span>${lim?`${esc(f.nome)} deve ser registrado antes de continuar trabalhando.`:`Faltam ${nfmt(LIMITE_TESTE-n)} dia(s). Depois disso, registre o funcionário como mensalista.`}</span>
     ${lim&&S.perfil==='dp'?`<button class="btn primary" data-govinc="${f.id}">Registrar como mensalista</button>`:''}</div>`})()}
        ${(()=>{const s=exameStatus(f);if(!s)return '';const al=s.dias<=EXAME_AVISO;
-         return `<div class="${al?(s.dias<0?'teste-alerta':'teste-info'):'teste-info'}" id="exameFicha" style="${al?'':'background:var(--surface-2);border-color:var(--line)'}"><b>Exame periódico: ${s.dias<0?`venceu em ${fmtData(s.venc)} (há ${-s.dias} dia(s))`:`próximo em ${fmtData(s.venc)}${al?` (faltam ${s.dias} dia(s))`:''}`}</b><span>Base: ${esc(s.base)}. De ano em ano; lance <b>EP</b> no ponto no dia do exame.</span>
-           ${dp?(S.exameEdit===f.id?`<form id="exameForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="exUlt">Último exame periódico em</label><input type="text" id="exUlt" name="ult" data-date="1" inputmode="numeric" value="${esc(f.ultExame||'')}" placeholder="DD/MM/AAAA (vazio = não informado)"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-exameedit="">Cancelar</button></div></form>`
-             :`<span><button class="btn" data-exameedit="${f.id}">Informar data do último exame</button></span>`):''}</div>`})()}
+         return `<div class="${al?(s.dias<0?'teste-alerta':'teste-info'):'teste-info'}" id="exameFicha" style="${al?'':'background:var(--surface-2);border-color:var(--line)'}"><b>Exame periódico: ${s.dias<0?`venceu em ${fmtData(s.venc)} (há ${-s.dias} dia(s))`:`próximo em ${fmtData(s.venc)}${al?` (faltam ${s.dias} dia(s))`:''}`}</b><span>Base: ${esc(s.base)}. De ano em ano; lance <b>EP</b> (ou <b>EF</b>, se for de mudança de função) no ponto no dia do exame.</span>
+           ${dp?(S.exameEdit===f.id?`<form id="exameForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="exUlt">Último exame (periódico ou de mudança de função) em</label><input type="text" id="exUlt" name="ult" data-date="1" inputmode="numeric" value="${esc(f.ultExame||'')}" placeholder="DD/MM/AAAA (vazio = não informado)"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-exameedit="">Cancelar</button></div></form>`
+             :`<span><button class="btn" data-exameedit="${f.id}">Informar data do último exame (periódico ou de mudança de função)</button></span>`):''}</div>`})()}
        ${f.vinc==='avulso'&&!f.saida&&(dp||f.avulsoPrazo)?`<div class="teste-info" id="prazoFicha">${f.avulsoPrazo?`<b>Avulso por prazo até ${esc(f.avulsoPrazo.ate)}</b><span>Sem período de teste. Não recebe diária: recebe o salário (${pctTxt(f)} na 1ª quinzena e o restante na 2ª) e os benefícios do acordo, como mensalista. No fim do prazo, registre como mensalista ou dispense.</span>`:`<span>Se ele vai ficar como avulso por um tempo combinado (ex.: 6 meses), sem período de teste, marque aqui.</span>`}
          ${dp&&S.prazoEdit!==f.id?`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-prazoedit="${f.id}">${f.avulsoPrazo?'Mudar o prazo':'Avulso por prazo'}</button>${f.avulsoPrazo?`<button class="btn" data-prazotirar="${f.id}">Tirar o prazo (volta ao período de teste)</button>`:''}</span>`:''}
          ${dp&&S.prazoEdit===f.id?`<form id="prazoForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="pAte">Avulso por prazo, sem período de teste, até:</label><input type="text" id="pAte" name="ate" data-date="1" inputmode="numeric" value="${esc(f.avulsoPrazo?.ate||maisMeses(f.adm,6))}" placeholder="DD/MM/AAAA"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar prazo</button><button class="btn" type="button" data-prazoedit="">Cancelar</button></div></form>`:''}</div>`:''}
@@ -2610,7 +2613,7 @@ function recibosFicha(f){
   const card=(t,v,cls='')=>`<div class="ac-card ${cls}"><span class="hint">${t}</span><b class="num">${v}</b></div>`;
   let h=`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Ponto de ${MES_NOME}</h3><button class="btn" data-govcal="${f.id}">Abrir calendário</button></div><div class="ac-cards">
     ${temAvulso(f)&&!porPrazo(f)?card('Dias como avulso',nfmt(tAv)):''}${porPrazo(f)?card('Dias trabalhados',nfmt(tMen)):f.vh.some(x=>x.vinc==='mensalista')?card('Dias como mensalista',nfmt(tMen)):''}
-    ${card('Faltas (F)',nF,nF?'':'off')}${card('Atestados (AT)',nAT,nAT?'':'off')}${nSU?card('Suspensões (SU)',nSU):''}${nPE?card('Perícias (PE)',nPE):''}${nFE?card('Férias (FE)',nFE):''}${nEA?card('Exame admissional (EA)',nEA):''}${(()=>{const n=Object.values(p).filter(x=>x.c==='EP').length;return n?card('Exame periódico (EP)',n):''})()}${card('Dias X',nX,'off')}${card('Dias sem lançamento',pend,pend?'':'off')}</div>`;
+    ${card('Faltas (F)',nF,nF?'':'off')}${card('Atestados (AT)',nAT,nAT?'':'off')}${nSU?card('Suspensões (SU)',nSU):''}${nPE?card('Perícias (PE)',nPE):''}${nFE?card('Férias (FE)',nFE):''}${nEA?card('Exame admissional (EA)',nEA):''}${(()=>{const n=Object.values(p).filter(x=>x.c==='EP').length,m=Object.values(p).filter(x=>x.c==='EF').length;return (n?card('Exame periódico (EP)',n):'')+(m?card('Exame mudança de função (EF)',m):'')})()}${card('Dias X',nX,'off')}${card('Dias sem lançamento',pend,pend?'':'off')}</div>`;
   if(dp)h+=agendaHTML(f);
   const blocos=[];let total=0,nSel=0;
   // caixinha para juntar este recibo numa impressão só (só para recibos já emitidos)
@@ -2923,12 +2926,12 @@ function drawEditor(err){
   const textos=[...new Set(Object.values(S.ponto).flatMap(p=>Object.values(p).map(x=>x.o).filter(Boolean)))];
   $('#modal').innerHTML=`<div class="overlay" id="ov"><form class="editor" id="edForm" aria-label="Lançar dia">
    <div><h2>${esc(f.nome)}</h2><span class="hint">${WD_LONG[dow(d)]}, ${dd(d)}/${ANO} · ${obrig(d)?'dia obrigatório':'fim de semana'}${ED.prev?' · lançado: '+CODES[ED.prev.c].l:' · Não informado'}</span></div>
-   <div class="codes">${['P','F','AT','SU','PE','FE','EA','EP','X'].map(k=>`<button type="button" class="c-${k}" data-code="${k}" aria-pressed="${k==='P'?!!trab&&ED.c!=='EP':ED.c===k}"><b>${k==='P'?'Obra':k}</b>${k==='P'?'Trabalhou':CODES[k].l}</button>`).join('')}
+   <div class="codes">${['P','F','AT','SU','PE','FE','EA','EP','EF','X'].map(k=>`<button type="button" class="c-${k}" data-code="${k}" aria-pressed="${k==='P'?!!trab&&!EXAME_TRAB.includes(ED.c):ED.c===k}"><b>${k==='P'?'Obra':k}</b>${k==='P'?'Trabalhou':CODES[k].l}</button>`).join('')}
      <button type="button" class="none" data-code="" aria-pressed="${!ED.c}"><b>—</b>Não informado</button></div>
    ${trab?`<div class="field"><label for="edObra">Obra do dia (digitação livre)</label><input type="text" id="edObra" list="dlObras" value="${esc(ED.o)}" autocomplete="off">
      <datalist id="dlObras">${textos.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
      <div class="obra-pick"><span class="hint">Obras cadastradas (clique para escolher):</span>${Object.entries(OBRAS).filter(([,o])=>o.status!=='Concluída').map(([oid,o])=>`<button type="button" class="pick ${empCls(oid)} ${norm(o.nome)===norm(ED.o)?'on':''}" data-obrapick="${esc(o.nome)}">${esc(o.nome)}</button>`).join('')}</div>
-     ${ED.c==='EP'?'<span class="hint">Exame periódico: conta como dia trabalhado nesta obra (passagens e benefícios do dia).</span>':`<label class="ac-chk" style="font-weight:500"><input type="checkbox" id="edMeio" ${ED.c==='M'?'checked':''}> Meio dia (vale 0,5)</label>`}
+     ${EXAME_TRAB.includes(ED.c)?`<span class="hint">${CODES[ED.c].l}: conta como dia trabalhado nesta obra (passagens e benefícios do dia) e renova o exame periódico (próximo em 12 meses).</span>`:`<label class="ac-chk" style="font-weight:500"><input type="checkbox" id="edMeio" ${ED.c==='M'?'checked':''}> Meio dia (vale 0,5)</label>`}
      <span class="sugg">Obra principal: ${sug}.${ED.o&&!resolve(ED.o)?' Nome novo: o DP vai vincular a uma obra cadastrada antes do fechamento.':''}</span></div>`:''}
    <div class="field"><label for="edObs">Observação do dia</label><input type="text" id="edObs" value="${esc(ED.obs)}" placeholder="${ED.c==='X'?'Motivo: férias, folga, exame ASO, obra paralisada, falta justificada…':''}"></div>
    ${precisaJust()?`<div class="field"><label for="edJust">Motivo da ${ED.prev?'correção':'alteração'} (obrigatório)</label><input type="text" id="edJust" placeholder="Ex.: mestre informou que trabalhou em outra obra"></div>`:''}
