@@ -1767,7 +1767,7 @@ function renderCad(){
        <div class="field"><label for="nCpf">CPF</label><input type="text" id="nCpf" name="cpf" placeholder="só números" inputmode="numeric" data-cpf="1"></div>
        <div class="field"><label for="nFunc">Função</label><select id="nFunc" name="funcao">${Object.keys(DIARIAS).map(x=>`<option>${x}</option>`).join('')}</select></div>
        <div class="field"><label for="nVinc">Vínculo</label><select id="nVinc" name="vinc"><option value="mensalista">Mensalista</option><option value="avulso">Avulso</option></select></div>
-       <div class="field"><label for="nObra">Obra de contratação</label><select id="nObra" name="obra">${opcoesObraEmp(TODAS()?'CONARTE':S.empresa)}</select></div>
+       <div class="field"><label for="nObra">Obra de contratação</label><select id="nObra" name="obra"><option value="">Escolha a obra…</option>${opcoesObraEmp(TODAS()?'CONARTE':S.empresa,'')}</select></div>
        <div class="field"><label for="nAdm" id="nAdmLbl">Data de admissão</label><input type="text" id="nAdm" name="adm" value="" placeholder="DD/MM/AAAA" data-date="1" inputmode="numeric"></div>
       </div>
       <p class="hint" style="margin:0">A empresa e a obra de contratação ficam guardadas no histórico do funcionário. Depois, a obra do dia a dia pode mudar livremente no ponto.</p>
@@ -2413,7 +2413,7 @@ $('#view').addEventListener('submit',e=>{
   const ac=avulso?{ben:{},tarifa:null}:lerAcordo(fm);if(ac.erro)return err(ac.erro);
   if(fm.id==='novoForm'){
     const nome=fm.nome.value.trim();if(nome.length<3)return err('Informe o nome completo.');
-    if(!fm.obra.value)return err(`Nenhuma obra da ${fm.empresa.value} cadastrada. Cadastre a obra na aba Obras.`);
+    if(!fm.obra.value)return err(Object.values(OBRAS).some(o=>o.empresa===fm.empresa.value)?'Escolha a obra de contratação.':`Nenhuma obra da ${fm.empresa.value} cadastrada. Cadastre a obra na aba Obras.`);
     if(!cpfValido(fm.cpf.value))return err('CPF inválido. Confira os números.');
     {const ja=ALL.find(x=>soDig(x.cpf)===soDig(fm.cpf.value));
       // diz de quem é o CPF; se a pessoa já saiu, oferece abrir a ficha para readmitir
@@ -3182,7 +3182,7 @@ $('#view').addEventListener('change',e=>{
     if(v){const d=lerData(v),k=d.getFullYear()*12+d.getMonth(),c=ANO*12+MES;if(k<c||k>c+1){e.target.value=pagData(emp,conta,q)||'';return toast(`Data fora do período: o pagamento de ${MES_NOME} deve ser em ${MES_NOME} ou no mês seguinte. Confira o ano.`)}}
     S.folha=S.folha||{};const D=S.folha._datas=S.folha._datas||{};D[emp]=D[emp]||{};D[emp][conta]=D[emp][conta]||{};D[emp][conta][q]=v;
     registrar(`Pagamento ${q==='q1'?'1ª':'2ª'} quinzena · ${conta} · ${MES_NOME}`,'—',v||'sem data','Data de pagamento');render();return toast('Data salva.')}
-  if(e.target.id==='nEmp'){$('#nObra').innerHTML=opcoesObraEmp(e.target.value);return}
+  if(e.target.id==='nEmp'){$('#nObra').innerHTML='<option value="">Escolha a obra…</option>'+opcoesObraEmp(e.target.value,'');return}
   if(e.target.id==='dEmp'){$('#dObra').innerHTML=opcoesObraEmp(e.target.value,byId(S.dadosEdit)?.contrat?.obra);return}
   if(e.target.matches('[data-cestacid]')){const k=e.target.dataset.cestacid,v=parseBRL(e.target.value||'0');
     if(e.target.value&&!(v>=0))return toast('Valor inválido.');
