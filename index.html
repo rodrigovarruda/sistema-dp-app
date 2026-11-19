@@ -1768,7 +1768,7 @@ function renderCad(){
        <div class="field"><label for="nFunc">Função</label><select id="nFunc" name="funcao">${Object.keys(DIARIAS).map(x=>`<option>${x}</option>`).join('')}</select></div>
        <div class="field"><label for="nVinc">Vínculo</label><select id="nVinc" name="vinc"><option value="mensalista">Mensalista</option><option value="avulso">Avulso</option></select></div>
        <div class="field"><label for="nObra">Obra de contratação</label><select id="nObra" name="obra">${opcoesObraEmp(TODAS()?'CONARTE':S.empresa)}</select></div>
-       <div class="field"><label for="nAdm" id="nAdmLbl">Data de admissão</label><input type="text" id="nAdm" name="adm" value="01/${MM}/${ANO}" placeholder="DD/MM/AAAA" data-date="1" inputmode="numeric"></div>
+       <div class="field"><label for="nAdm" id="nAdmLbl">Data de admissão</label><input type="text" id="nAdm" name="adm" value="" placeholder="DD/MM/AAAA" data-date="1" inputmode="numeric"></div>
       </div>
       <p class="hint" style="margin:0">A empresa e a obra de contratação ficam guardadas no histórico do funcionário. Depois, a obra do dia a dia pode mudar livremente no ponto.</p>
       <div id="acBloco"><h3 class="sub">Acordo: o que ele tem direito e quanto</h3><p class="hint" style="margin:0 0 6px">Marque só as verbas combinadas com o funcionário e informe o valor acordado.</p>
@@ -1979,11 +1979,15 @@ function prepImport(d){
     // já cadastrado: completa o que falta (salário do mensalista, admissão); salário diferente só com a caixinha marcada
     const sal=f&&f.vinc==='mensalista'?acordo(f).salario:null;
     const faltaSal=!!f&&f.vinc==='mensalista'&&!sal&&x.salario>0,difSal=!!sal&&x.salario>0&&Math.abs(sal-x.salario)>.005;
-    return {...x,existe:f?f.id:null,completar,faltaSal,difSal,salSist:sal,faltaAdm:!!f&&!f.adm&&!!x.adm,atualizar:false,semEmp:!FUNC[x.empresa],marcado:!f&&!!FUNC[x.empresa]}});
+    // admissão diferente da da folha (ex.: cadastrado à mão com a data que vinha pronta, 01/10/2026): corrige com a caixinha (já marcada).
+    // Quem entrou como avulso: a admissão da folha é a do registro (f.admissao); os demais, f.adm
+    const kAdm=f&&f.contrat?.vinc==='avulso'?'admissao':'adm',admSist=f?f[kAdm]||'':'';
+    const difAdm=!!f&&!!x.adm&&!!admSist&&admSist!==x.adm&&!!lerData(x.adm);
+    return {...x,existe:f?f.id:null,completar,faltaSal,difSal,salSist:sal,faltaAdm:!!f&&!f.adm&&!!x.adm,difAdm,kAdm,admSist,atualizarAdm:difAdm,atualizar:false,semEmp:!FUNC[x.empresa],marcado:!f&&!!FUNC[x.empresa]}});
   return {comp:d.comp,lista};
 }
 const funcaoDe=n=>Object.keys(DIARIAS).find(k=>norm(k)===norm(n));
-const aCompletar=x=>x.completar||x.faltaSal||x.faltaAdm||(x.difSal&&x.atualizar);
+const aCompletar=x=>x.completar||x.faltaSal||x.faltaAdm||(x.difSal&&x.atualizar)||(x.difAdm&&x.atualizarAdm);
 function impLabel(){
   const l=S.imp.lista,n=l.filter(x=>!x.existe&&!x.semEmp&&x.marcado).length,c=l.filter(x=>x.existe&&aCompletar(x)).length;
   return {txt:[n?`Importar ${n} funcionário(s)`:'',c?`${n?'e completar':'Completar'} ${c} cadastro(s)`:''].filter(Boolean).join(' ')||'Nada a importar',ok:n+c>0};
@@ -1995,7 +1999,7 @@ function renderImport(){
     if(x.completar)it.push('CPF será completado');if(x.faltaAdm)it.push(`admissão ${esc(x.adm)} será preenchida`);
     if(x.faltaSal)it.push(`salário ${brl(x.salario)} será preenchido`);
     if(f.vinc!=='mensalista')it.push('no sistema está como avulso: o salário não foi preenchido. Se já foi registrado, use "Registrar como mensalista" na ficha');
-    return it.join(' · ')||(x.difSal?'':'nada a completar')};
+    return it.join(' · ')||(x.difSal||x.difAdm?'':'nada a completar')};
   return `<div class="cad-form" style="margin-top:0"><h3 class="sub" style="margin-top:0">Importar da folha de ${compLabel(I.comp)}</h3>
     <p class="hint" style="margin:0">${novos.length} funcionário(s) novo(s) e ${ja.length} já cadastrado(s). Nos já cadastrados, só é completado o que falta (veja a lista no fim).</p>
     <p class="hint" style="margin:0">Os novos entram como <b>mensalistas</b>, com o salário da folha e sem benefícios, na obra <b>"A DEFINIR"</b> da empresa. Depois, troque a obra no ponto e preencha o acordo na ficha de cada um.${novasF.length?` Funções que serão criadas (sem diária de avulso): ${novasF.map(esc).join(', ')}.`:''}</p>
@@ -2008,7 +2012,7 @@ function renderImport(){
     ${ja.length?`<h3 class="sub">Já cadastrados (${ja.length}): o que falta é completado com a folha</h3>
     <div class="scroller"><table class="ben"><thead><tr><th style="text-align:left">Nome</th><th>Empresa</th><th style="text-align:left">O que acontece</th></tr></thead><tbody>
       ${I.lista.map((x,i)=>!x.existe?'':`<tr><td style="text-align:left;font-family:var(--f-body);white-space:normal"><b>${esc(x.nome)}</b></td><td>${esc(x.empresa)}</td>
-        <td style="text-align:left;font-family:var(--f-body);white-space:normal">${jaInfo(x)}${x.difSal?`${jaInfo(x)?'<br>':''}<label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-impsal="${i}" ${x.atualizar?'checked':''}> Salário no sistema ${brl(x.salSist)}, na folha ${brl(x.salario)}: atualizar a partir de ${compLabel(COMP)}</label>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}</div>`;
+        <td style="text-align:left;font-family:var(--f-body);white-space:normal">${jaInfo(x)}${x.difSal?`${jaInfo(x)?'<br>':''}<label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-impsal="${i}" ${x.atualizar?'checked':''}> Salário no sistema ${brl(x.salSist)}, na folha ${brl(x.salario)}: atualizar a partir de ${compLabel(COMP)}</label>`:''}${x.difAdm?`<br><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-impadm="${i}" ${x.atualizarAdm?'checked':''}> Admissão no sistema ${esc(x.admSist)}, na folha ${esc(x.adm)}: usar a da folha</label>`:''}</td></tr>`).join('')}</tbody></table></div>`:''}</div>`;
 }
 function importarFolha(){
   const I=S.imp,sel=I.lista.filter(x=>!x.existe&&!x.semEmp&&x.marcado),obraDe={},criadas=[],t=Date.now();
@@ -2032,6 +2036,7 @@ function importarFolha(){
   for(const x of I.lista){const f=x.existe&&byId(x.existe);if(!f||!aCompletar(x))continue;comp++;
     if(x.completar&&!soDig(f.cpf)){f.cpf=fmtCpf(x.cpf);registrar(`CPF · ${f.nome}`,'—',f.cpf,'Completado pela folha')}
     if(x.faltaAdm&&!f.adm){f.adm=x.adm;registrar(`Admissão · ${f.nome}`,'—',x.adm,'Completado pela folha')}
+    else if(x.difAdm&&x.atualizarAdm){const antes=f[x.kAdm]||'—';f[x.kAdm]=x.adm;registrar(`Admissão · ${f.nome}`,antes,x.adm,`Corrigida pela folha de ${compLabel(I.comp)}`)}
     if(x.faltaSal){const a=acordo(f);
       // o salário que faltava vale para o acordo atual e para os próximos que também estão sem salário
       for(const y of f.acordos)if(y.desde>=a.desde&&!y.salario)y.salario=x.salario;
@@ -3202,8 +3207,8 @@ $('#view').addEventListener('change',e=>{
     const r=new FileReader();
     r.onload=()=>{try{S.imp=prepImport(JSON.parse(r.result));S.cadSel='importar';render()}catch(er){toast('Não foi possível ler o arquivo: '+er.message)}};
     r.readAsText(e.target.files[0]);return}
-  if(e.target.matches('[data-impx],[data-impsal]')){const x=S.imp.lista[+(e.target.dataset.impx??e.target.dataset.impsal)];
-    if(e.target.dataset.impx!=null)x.marcado=e.target.checked;else x.atualizar=e.target.checked;
+  if(e.target.matches('[data-impx],[data-impsal],[data-impadm]')){const x=S.imp.lista[+(e.target.dataset.impx??e.target.dataset.impsal??e.target.dataset.impadm)];
+    if(e.target.dataset.impx!=null)x.marcado=e.target.checked;else if(e.target.dataset.impadm!=null)x.atualizarAdm=e.target.checked;else x.atualizar=e.target.checked;
     const lb=impLabel(),b=document.querySelector('[data-impok]');b.textContent=lb.txt;b.disabled=!lb.ok;return}
   if(e.target.matches('[data-impall]')){S.imp.lista.forEach(x=>{if(!x.existe&&!x.semEmp)x.marcado=e.target.checked});return render()}
   if(e.target.matches('[data-logo]')&&e.target.files[0]){
