@@ -8,7 +8,7 @@
   --bg:#eef1f0; --surface:#ffffff; --surface-2:#f6f8f7; --ink:#17252f; --muted:#5b6a72; --line:#d5dcde;
   --brand:#1f4d63; --brand-ink:#ffffff; --accent:#b8740b; --accent-soft:#fbefd9;
   --ok:#1f7a4c; --ok-bg:#dff2e7; --half:#4f8a2a; --half-bg:#ecf5df;
-  --bad:#b3261e; --bad-bg:#fbe1de; --warn:#94600a; --warn-bg:#fcefd2; --su:#7a3300; --su-bg:#ffb366; --pe:#5b2a9e; --pe-bg:#e9dcfb; --fe:#ffffff; --fe-bg:#2563c9;
+  --bad:#b3261e; --bad-bg:#fbe1de; --warn:#94600a; --warn-bg:#fcefd2; --su:#7a3300; --su-bg:#ffb366; --pe:#5b2a9e; --pe-bg:#e9dcfb; --fe:#ffffff; --fe-bg:#2563c9; --ea:#0b5c5f; --ea-bg:#c9eef0; --ep:#2f5f12; --ep-bg:#d6f0c6;
   --rest:#4d6070; --rest-bg:#e6ebef; --av:#0d6f73; --av-bg:#d9f0ef; --ft:#6b3fa0; --ft-bg:#ece3f7;
   --weekend:#f0f2f3; --focus:#2f7fb0;
   --conarte:#b4530a; --conarte-bg:#fde6d2; --engevac:#1d5fa8; --engevac-bg:#dce8f8; --cieng:#4f5b66; --cieng-bg:#e3e7eb;
@@ -20,7 +20,7 @@
   --bg:#0e1518; --surface:#162126; --surface-2:#1b282e; --ink:#e2e9ec; --muted:#95a5ad; --line:#2a3a41;
   --brand:#5ea6c7; --brand-ink:#0b1417; --accent:#e3a43c; --accent-soft:#3a2c12;
   --ok:#6fd39c; --ok-bg:#163a28; --half:#a6d77a; --half-bg:#24361a;
-  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12; --su:#ffb36b; --su-bg:#6b3608; --pe:#c9a8ff; --pe-bg:#33204f; --fe:#ffffff; --fe-bg:#3b78dc;
+  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12; --su:#ffb36b; --su-bg:#6b3608; --pe:#c9a8ff; --pe-bg:#33204f; --fe:#ffffff; --fe-bg:#3b78dc; --ea:#7fe0e4; --ea-bg:#123d40; --ep:#a8e08a; --ep-bg:#1f3a12;
   --rest:#a9b9c6; --rest-bg:#24313a; --av:#6fd6d2; --av-bg:#123a3a; --ft:#c7a5f0; --ft-bg:#2f2442;
   --weekend:#121c20; --focus:#7cc3e6; color-scheme:dark;
   --conarte:#f5a35c; --conarte-bg:#3d2614; --engevac:#86b9f0; --engevac-bg:#14283f; --cieng:#b9c3cc; --cieng-bg:#2b3238}}
@@ -28,7 +28,7 @@
   --bg:#0e1518; --surface:#162126; --surface-2:#1b282e; --ink:#e2e9ec; --muted:#95a5ad; --line:#2a3a41;
   --brand:#5ea6c7; --brand-ink:#0b1417; --accent:#e3a43c; --accent-soft:#3a2c12;
   --ok:#6fd39c; --ok-bg:#163a28; --half:#a6d77a; --half-bg:#24361a;
-  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12; --su:#ffb36b; --su-bg:#6b3608; --pe:#c9a8ff; --pe-bg:#33204f; --fe:#ffffff; --fe-bg:#3b78dc;
+  --bad:#ff8a80; --bad-bg:#45201d; --warn:#f0c060; --warn-bg:#3d2f12; --su:#ffb36b; --su-bg:#6b3608; --pe:#c9a8ff; --pe-bg:#33204f; --fe:#ffffff; --fe-bg:#3b78dc; --ea:#7fe0e4; --ea-bg:#123d40; --ep:#a8e08a; --ep-bg:#1f3a12;
   --rest:#a9b9c6; --rest-bg:#24313a; --av:#6fd6d2; --av-bg:#123a3a; --ft:#c7a5f0; --ft-bg:#2f2442;
   --weekend:#121c20; --focus:#7cc3e6; color-scheme:dark;
   --conarte:#f5a35c; --conarte-bg:#3d2614; --engevac:#86b9f0; --engevac-bg:#14283f; --cieng:#b9c3cc; --cieng-bg:#2b3238}
@@ -112,6 +112,7 @@ th.we,td.we{background:var(--weekend)}
 .c-P{background:var(--ok-bg);color:var(--ok)} .c-M{background:var(--half-bg);color:var(--half)}
 .c-F{background:var(--bad-bg);color:var(--bad)} .c-FJ,.c-AT{background:var(--warn-bg);color:var(--warn)}
 .c-SU{background:var(--su-bg);color:var(--su)} .c-PE{background:var(--pe-bg);color:var(--pe)} .c-FE{background:var(--fe-bg);color:var(--fe)}
+.c-EA{background:var(--ea-bg);color:var(--ea)} .c-EP{background:var(--ep-bg);color:var(--ep)}
 .c-FO,.c-D,.c-X{background:var(--rest-bg);color:var(--rest)} .c-AV{background:var(--av-bg);color:var(--av)} .c-FT{background:var(--ft-bg);color:var(--ft)}
 td.tot{padding:0 8px;font-family:var(--f-data);font-weight:600;white-space:nowrap}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
@@ -433,17 +434,21 @@ const CODES={
   PE:{s:'PE',l:'Perícia (INSS)',peso:0},
   // férias: dia pago (não desconta salário), sem benefícios do dia e fora do relatório de faltas
   FE:{s:'FE',l:'Férias',peso:0},
+  // exames ocupacionais: ASO admissional = dia justificado (não é falta, sem diária nem benefícios do dia);
+  // exame periódico = conta como dia trabalhado na obra (recebe passagens e volta a trabalhar)
+  EA:{s:'EA',l:'Exame admissional (ASO)',peso:0},
+  EP:{s:'EP',l:'Exame periódico',peso:1,trab:true},
   X:{s:'X',l:'Sábado, domingo, feriado ou falta justificada',peso:0}
 };
 // Elegibilidade aprovada pelo DP: só dias trabalhados contam (meio dia = 0,5)
-const ELEG={bonif:['P','M'],ajuda:['P','M'],cafe:['P','M'],transp:['P','M'],alim:['P','M']};
+const ELEG={bonif:['P','M','EP'],ajuda:['P','M','EP'],cafe:['P','M','EP'],transp:['P','M','EP'],alim:['P','M','EP']};
 const rotulo=r=>(r.c==='M'?'½ ':'')+r.o;
 // sigla da obra para a planilha do mês inteiro: iniciais das palavras (sem "de", "da"...), ou 3 letras se for uma palavra só
 const sigla=nome=>{const p=String(nome||'').split(/[\s\-\/]+/).filter(w=>w&&!/^(d[aeo]s?|e)$/i.test(w));
   return (p.length>1?p.slice(0,3).map(w=>w[0]).join(''):(p[0]||'').slice(0,3)).toUpperCase()};
 const rotuloCurto=r=>(r.c==='M'?'½':'')+sigla(OBRAS[resolve(r.o)]?.nome||r.o);
 const empCls=id=>id&&OBRAS[id]?'emp-'+OBRAS[id].empresa:'';
-const corDia=r=>r&&CODES[r.c]?.trab?empCls(resolve(r.o)):'';
+const corDia=r=>r&&CODES[r.c]?.trab&&r.c!=='EP'?empCls(resolve(r.o)):'';
 
 const OBRAS={
   ipe:{cod:'OB-014',nome:'Residencial Ipê',empresa:'CONARTE',cidade:'Cidade A',uf:'MG',resp:'Gestor Residencial Ipê',inicio:'03/02/2026',fim:'30/06/2027',status:'Em andamento'},
@@ -1427,7 +1432,7 @@ function cellHTML(f,d){
   const pend=!r&&exigeDia(f,d)&&d<=ateOntem();
   const unl=r&&CODES[r.c].trab&&r.o&&!resolve(r.o);
   const title=`${f.nome} · ${WD_LONG[dow(d)]} ${dd(d)} · ${r?CODES[r.c].l+(r.o?' · '+r.o:'')+(r.obs?' · '+r.obs:''):'Não informado'}${can?'':' · sem permissão para editar'}`;
-  return `<td class="${we?'we':''}"><button class="cell ${r?'c-'+r.c:''} ${corDia(r)} ${pend?'pend':''} ${r&&r.obs?'has-obs':''}" data-f="${f.id}" data-d="${d}" ${can?'':'disabled'} title="${esc(title)}" aria-label="${esc(title)}">${r?(CODES[r.c].trab?esc(S.planNomes?rotulo(r):rotuloCurto(r)):CODES[r.c].s):(pend?'·':'')}${unl?'<span class="dot"></span>':''}</button></td>`;
+  return `<td class="${we?'we':''}"><button class="cell ${r?'c-'+r.c:''} ${corDia(r)} ${pend?'pend':''} ${r&&r.obs?'has-obs':''}" data-f="${f.id}" data-d="${d}" ${can?'':'disabled'} title="${esc(title)}" aria-label="${esc(title)}">${r?(CODES[r.c].trab&&r.c!=='EP'?esc(S.planNomes?rotulo(r):rotuloCurto(r)):CODES[r.c].s):(pend?'·':'')}${unl?'<span class="dot"></span>':''}</button></td>`;
 }
 function renderPlanilha(){
   // filtro por obra: lotados nela no fim do mês ou com algum dia trabalhado nela no mês
@@ -1452,7 +1457,7 @@ function renderPlanilha(){
   if(!S.planNomes){const usadas=new Map();
     for(const f of fs)for(const d in S.ponto[f.id]){const r=S.ponto[f.id][d];if(!CODES[r.c]?.trab)continue;const k=resolve(r.o),nome=OBRAS[k]?.nome||r.o;usadas.set(nome,{s:sigla(nome),cls:empCls(k)})}
     if(usadas.size)siglas=`<div class="legend"><b>Siglas:</b>${[...usadas].sort((a,b)=>a[1].s.localeCompare(b[1].s)).map(([n,x])=>`<span><i class="c-P ${x.cls}">${esc(x.s)}</i>${esc(n)}</span>`).join('')}</div>`}
-  h+=`</tbody></table></div>${siglas}<div class="legend"><span><i class="c-P emp-CONARTE">Obra da CONARTE</i></span><span><i class="c-P emp-ENGEVAC">Obra da ENGEVAC</i></span><span><i class="c-P emp-CIENG">Obra da CIENG</i></span><span><i class="c-P">Obra não vinculada</i></span><span><i class="c-M">½ Obra</i>Meio dia</span><span><i class="c-F">F</i>Falta não justificada</span><span><i class="c-AT">AT</i>Atestado médico</span><span><i class="c-SU">SU</i>Suspensão</span><span><i class="c-PE">PE</i>Perícia (INSS)</span><span><i class="c-FE">FE</i>Férias</span><span><i class="c-X">X</i>Sábado, domingo, feriado ou falta justificada (motivo na observação)</span>
+  h+=`</tbody></table></div>${siglas}<div class="legend"><span><i class="c-P emp-CONARTE">Obra da CONARTE</i></span><span><i class="c-P emp-ENGEVAC">Obra da ENGEVAC</i></span><span><i class="c-P emp-CIENG">Obra da CIENG</i></span><span><i class="c-P">Obra não vinculada</i></span><span><i class="c-M">½ Obra</i>Meio dia</span><span><i class="c-F">F</i>Falta não justificada</span><span><i class="c-AT">AT</i>Atestado médico</span><span><i class="c-SU">SU</i>Suspensão</span><span><i class="c-PE">PE</i>Perícia (INSS)</span><span><i class="c-FE">FE</i>Férias</span><span><i class="c-EA">EA</i>Exame admissional (ASO)</span><span><i class="c-EP">EP</i>Exame periódico (conta como trabalhado)</span><span><i class="c-X">X</i>Sábado, domingo, feriado ou falta justificada (motivo na observação)</span>
     <span><i class="cell pend" style="width:auto;height:auto;display:inline-block;padding:1px 6px">·</i>Dia obrigatório sem lançamento</span>
     <span><i style="background:var(--accent);width:8px;height:8px;border-radius:50%;padding:0"></i>Nome de obra a vincular</span></div></section>`;
   // a planilha tem rolagem própria: mantém a posição ao lançar um dia
@@ -2543,13 +2548,13 @@ function modalRecibos(titulo,sub,out,refresh){
 }
 function recibosFicha(f){
   const dp=S.perfil==='dp',st=stDe(f),pode=dp&&st!=='fechado'&&st!=='aguardando',p=S.ponto[f.id],c=calc(f);
-  let tAv=0,tMen=0,nF=0,nAT=0,nX=0,nSU=0,nPE=0,nFE=0;
-  for(const d in p){const x=p[d];if(CODES[x.c].trab){if(pagaDiaria(f,+d))tAv+=CODES[x.c].peso;else tMen+=CODES[x.c].peso}else if(x.c==='F')nF++;else if(x.c==='AT')nAT++;else if(x.c==='SU')nSU++;else if(x.c==='PE')nPE++;else if(x.c==='FE')nFE++;else nX++}
+  let tAv=0,tMen=0,nF=0,nAT=0,nX=0,nSU=0,nPE=0,nFE=0,nEA=0,nEP=0;
+  for(const d in p){const x=p[d];if(CODES[x.c].trab){if(pagaDiaria(f,+d))tAv+=CODES[x.c].peso;else tMen+=CODES[x.c].peso}else if(x.c==='F')nF++;else if(x.c==='AT')nAT++;else if(x.c==='SU')nSU++;else if(x.c==='PE')nPE++;else if(x.c==='EA')nEA++;else if(x.c==='FE')nFE++;else nX++}
   const pend=atrasados(pendF(f)).length,nv=nvF(f);
   const card=(t,v,cls='')=>`<div class="ac-card ${cls}"><span class="hint">${t}</span><b class="num">${v}</b></div>`;
   let h=`<div class="ficha-top" style="margin-top:14px"><h3 class="sub" style="margin:0">Ponto de ${MES_NOME}</h3><button class="btn" data-govcal="${f.id}">Abrir calendário</button></div><div class="ac-cards">
     ${temAvulso(f)&&!porPrazo(f)?card('Dias como avulso',nfmt(tAv)):''}${porPrazo(f)?card('Dias trabalhados',nfmt(tMen)):f.vh.some(x=>x.vinc==='mensalista')?card('Dias como mensalista',nfmt(tMen)):''}
-    ${card('Faltas (F)',nF,nF?'':'off')}${card('Atestados (AT)',nAT,nAT?'':'off')}${nSU?card('Suspensões (SU)',nSU):''}${nPE?card('Perícias (PE)',nPE):''}${nFE?card('Férias (FE)',nFE):''}${card('Dias X',nX,'off')}${card('Dias sem lançamento',pend,pend?'':'off')}</div>`;
+    ${card('Faltas (F)',nF,nF?'':'off')}${card('Atestados (AT)',nAT,nAT?'':'off')}${nSU?card('Suspensões (SU)',nSU):''}${nPE?card('Perícias (PE)',nPE):''}${nFE?card('Férias (FE)',nFE):''}${nEA?card('Exame admissional (EA)',nEA):''}${(()=>{const n=Object.values(p).filter(x=>x.c==='EP').length;return n?card('Exame periódico (EP)',n):''})()}${card('Dias X',nX,'off')}${card('Dias sem lançamento',pend,pend?'':'off')}</div>`;
   if(dp)h+=agendaHTML(f);
   const blocos=[];let total=0,nSel=0;
   // caixinha para juntar este recibo numa impressão só (só para recibos já emitidos)
@@ -2862,12 +2867,12 @@ function drawEditor(err){
   const textos=[...new Set(Object.values(S.ponto).flatMap(p=>Object.values(p).map(x=>x.o).filter(Boolean)))];
   $('#modal').innerHTML=`<div class="overlay" id="ov"><form class="editor" id="edForm" aria-label="Lançar dia">
    <div><h2>${esc(f.nome)}</h2><span class="hint">${WD_LONG[dow(d)]}, ${dd(d)}/${ANO} · ${obrig(d)?'dia obrigatório':'fim de semana'}${ED.prev?' · lançado: '+CODES[ED.prev.c].l:' · Não informado'}</span></div>
-   <div class="codes">${['P','F','AT','SU','PE','FE','X'].map(k=>`<button type="button" class="c-${k}" data-code="${k}" aria-pressed="${k==='P'?!!trab:ED.c===k}"><b>${k==='P'?'Obra':k}</b>${k==='P'?'Trabalhou':CODES[k].l}</button>`).join('')}
+   <div class="codes">${['P','F','AT','SU','PE','FE','EA','EP','X'].map(k=>`<button type="button" class="c-${k}" data-code="${k}" aria-pressed="${k==='P'?!!trab&&ED.c!=='EP':ED.c===k}"><b>${k==='P'?'Obra':k}</b>${k==='P'?'Trabalhou':CODES[k].l}</button>`).join('')}
      <button type="button" class="none" data-code="" aria-pressed="${!ED.c}"><b>—</b>Não informado</button></div>
    ${trab?`<div class="field"><label for="edObra">Obra do dia (digitação livre)</label><input type="text" id="edObra" list="dlObras" value="${esc(ED.o)}" autocomplete="off">
      <datalist id="dlObras">${textos.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
      <div class="obra-pick"><span class="hint">Obras cadastradas (clique para escolher):</span>${Object.entries(OBRAS).filter(([,o])=>o.status!=='Concluída').map(([oid,o])=>`<button type="button" class="pick ${empCls(oid)} ${norm(o.nome)===norm(ED.o)?'on':''}" data-obrapick="${esc(o.nome)}">${esc(o.nome)}</button>`).join('')}</div>
-     <label class="ac-chk" style="font-weight:500"><input type="checkbox" id="edMeio" ${ED.c==='M'?'checked':''}> Meio dia (vale 0,5)</label>
+     ${ED.c==='EP'?'<span class="hint">Exame periódico: conta como dia trabalhado nesta obra (passagens e benefícios do dia).</span>':`<label class="ac-chk" style="font-weight:500"><input type="checkbox" id="edMeio" ${ED.c==='M'?'checked':''}> Meio dia (vale 0,5)</label>`}
      <span class="sugg">Obra principal: ${sug}.${ED.o&&!resolve(ED.o)?' Nome novo: o DP vai vincular a uma obra cadastrada antes do fechamento.':''}</span></div>`:''}
    <div class="field"><label for="edObs">Observação do dia</label><input type="text" id="edObs" value="${esc(ED.obs)}" placeholder="${ED.c==='X'?'Motivo: férias, folga, exame ASO, obra paralisada, falta justificada…':''}"></div>
    ${precisaJust()?`<div class="field"><label for="edJust">Motivo da ${ED.prev?'correção':'alteração'} (obrigatório)</label><input type="text" id="edJust" placeholder="Ex.: mestre informou que trabalhou em outra obra"></div>`:''}
