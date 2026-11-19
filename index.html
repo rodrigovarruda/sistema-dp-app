@@ -1381,6 +1381,7 @@ function renderStatus(){
    ${dv?`<span class="chip warn">${dv} avulso(s) com dias trabalhados ≠ diárias</span>`:''}
    ${nf?bt('fech','ok',`${nf} de ${funcsEmp().length} funcionários fechados`):''}
    ${nl?bt('teste','bad',`${nl} funcionário(s) no limite do período de teste: registrar`):''}
+   ${(()=>{const fs=funcsEmp().filter(exameAlerta),v=fs.filter(f=>exameAlerta(f).dias<0).length;return fs.length?bt('exame',v?'bad':'warn',`${fs.length} funcionário(s) com exame periódico ${v?`a fazer (${v} vencido(s))`:'a vencer'}`,`Exame periódico de ano em ano: aparece ${EXAME_AVISO} dias antes de vencer. Clique para ver de quem é`):''})()}
    ${(()=>{const n=funcsEmp().filter(ausAlerta).length;return n?bt('aus','warn',`${n} funcionário(s) com muitas faltas ou atestados`,`${AUS_LIM.F} ou mais faltas, ou ${AUS_LIM.AT} ou mais atestados, nos últimos ${AUS_DIAS} dias. Clique para ver de quem é`):''})()}
    ${(()=>{const n=S.perfil==='dp'?lembAvisar(funcsEmp()).length:0;return n?`<button class="chip warn" data-golemb="1" title="Ver os lembretes do acordo">${n} lembrete(s) de acordo para revisar</button>`:''})()}
    ${S.perfil==='gestor'?'<span class="chip">Vendo só a equipe lotada no Residencial Ipê</span>':''}${painelStatus()}`;
@@ -1400,6 +1401,33 @@ function ausencias90(f){
 }
 const ausAlerta=f=>{const a=ausencias90(f);return a.F.length>=AUS_LIM.F||a.runs.length>=AUS_LIM.AT?a:null};
 const dm=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+// ---------- Exame periódico: de ano em ano ----------
+// base = o exame mais recente (EP ou EA lançado no ponto, de qualquer mês guardado, ou f.ultExame informado na ficha);
+// sem exame, vale o aniversário da admissão (registro). Alerta 30 dias antes e depois de vencido.
+const EXAME_AVISO=30;
+const somaMeses=(d,n)=>new Date(d.getFullYear(),d.getMonth()+n,d.getDate());
+const diasEntre=(a,b)=>Math.round((b-a)/864e5);
+function dataRegistro(f){if(f.admissao&&lerData(f.admissao))return lerData(f.admissao);if(f.contrat?.vinc!=='avulso'&&lerData(f.adm))return lerData(f.adm);return null}
+function ultimoExame(f){
+  let ult=null,orig='';const ver=(d,o)=>{if(d&&(!ult||d>ult)){ult=d;orig=o}};
+  const comps={...(S.comps||{}),[COMP]:{ponto:S.ponto}};
+  for(const [ck,t] of Object.entries(comps)){const pt=t?.ponto?.[f.id];if(!pt)continue;const [a,m]=ck.split('-').map(Number);
+    for(const d in pt){const c=pt[d]?.c;if(c==='EP'||c==='EA')ver(new Date(a,m-1,+d),c==='EP'?'exame periódico':'exame admissional')}}
+  if(f.ultExame)ver(lerData(f.ultExame),'exame (informado na ficha)');
+  return ult?{d:ult,orig}:null;
+}
+function exameStatus(f){
+  if(f.vinc!=='mensalista'||f.saida||!ativoNoMes(f))return null;
+  const h=new Date();h.setHours(0,0,0,0);const ue=ultimoExame(f);
+  if(ue){const venc=somaMeses(ue.d,12);return {venc,base:`último ${ue.orig} em ${fmtData(ue.d)}`,dias:diasEntre(h,venc)}}
+  const reg=dataRegistro(f);if(!reg)return null;
+  // pelo aniversário da admissão: o deste ano (ou o próximo); se já passou e não há exame depois dele, está vencido
+  let an=new Date(h.getFullYear(),reg.getMonth(),reg.getDate());if(an<=reg)an=somaMeses(reg,12);
+  const prox=an<h&&diasEntre(an,h)>60?new Date(h.getFullYear()+1,reg.getMonth(),reg.getDate()):an;
+  if(prox<=reg)return null;
+  return {venc:prox,base:`aniversário da admissão (${fmtData(reg)})`,dias:diasEntre(h,prox)};
+}
+const exameAlerta=f=>{const s=exameStatus(f);return s&&s.dias<=EXAME_AVISO?s:null};
 // dias seguidos viram faixa ("03/08 a 07/08"); fim de semana e feriado no meio não quebram a faixa
 function faixasDias(ds){
   const s=[...ds].sort((a,b)=>a-b),out=[];let i=0;
@@ -1417,6 +1445,12 @@ function painelStatus(){
     corpo=[...por].sort((a,b)=>b[1].length-a[1].length||a[0].nome.localeCompare(b[0].nome)).map(([f,ds])=>`<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${ds.length} dia(s): ${faixasDias(ds)}</span></span><button class="btn" data-stcal="${f.id}">Abrir calendário</button></div>`).join('')}
   else if(k==='teste'){const fs=funcsEmp().filter(noLimite);tit=`No limite do período de teste (${LIMITE_TESTE} dias) · ${fs.length} funcionário(s)`;
     corpo=fs.map(f=>`<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${esc(f.funcao)} · ${nfmt(diasTeste(f))} dia(s) de teste desde ${esc(f.adm)}</span></span>${dp?`<span style="display:flex;gap:6px"><button class="btn primary" data-streg="${f.id}">Registrar</button><button class="btn" data-stficha="${f.id}">Abrir ficha</button></span>`:''}</div>`).join('')}
+  else if(k==='exame'){const ls=funcsEmp().map(f=>({f,s:exameAlerta(f)})).filter(x=>x.s).sort((a,b)=>a.s.venc-b.s.venc);
+    tit=`Exame periódico (de ano em ano) · ${ls.length} funcionário(s)`;
+    corpo=ls.map(({f,s})=>`<div class="st-linha"><span><b>${esc(f.nome)}</b>${emp(f)} <span class="hint">· ${esc(f.funcao)}</span><br>
+      <span class="hint"><b style="color:${s.dias<0?'var(--bad)':'inherit'}">${s.dias<0?`Venceu em ${fmtData(s.venc)} (há ${-s.dias} dia(s))`:s.dias===0?`Vence hoje (${fmtData(s.venc)})`:`Vence em ${fmtData(s.venc)} (faltam ${s.dias} dia(s))`}</b> · base: ${esc(s.base)}</span></span>
+      <span style="display:flex;gap:6px">${dp?`<button class="btn" data-stficha="${f.id}">Abrir ficha</button>`:''}</span></div>`).join('')
+      +`<p class="hint" style="margin:6px 0 0">Quando o exame for feito, lance <b>EP</b> no ponto do dia (ou informe a data na ficha, em "Exame periódico"): o próximo vence 12 meses depois. Sem exame lançado, vale o aniversário da admissão.</p>`}
   else if(k==='aus'){const ls=funcsEmp().map(f=>({f,a:ausAlerta(f)})).filter(x=>x.a).sort((x,y)=>(y.a.F.length+y.a.runs.length)-(x.a.F.length+x.a.runs.length)||x.f.nome.localeCompare(y.f.nome));
     const a0=ls[0]?.a;tit=`Muitas faltas ou atestados nos últimos ${AUS_DIAS} dias${a0?` (${dm(a0.ini)} a ${dm(a0.ref)})`:''} · ${ls.length} funcionário(s)`;
     corpo=ls.map(({f,a})=>{const fl=a.F.length,at=a.runs.length,dAt=a.AT.length;
@@ -1775,6 +1809,10 @@ function renderCad(){
   return `<div class="${lim?'teste-alerta':'teste-info'}"><b>${lim?(n>LIMITE_TESTE?'⚠ Limite do período de teste ultrapassado':'⚠ Limite do período de teste atingido'):'Período de teste'}: ${nfmt(n)} de ${LIMITE_TESTE} dias trabalhados.</b>
     <span>${lim?`${esc(f.nome)} deve ser registrado antes de continuar trabalhando.`:`Faltam ${nfmt(LIMITE_TESTE-n)} dia(s). Depois disso, registre o funcionário como mensalista.`}</span>
     ${lim&&S.perfil==='dp'?`<button class="btn primary" data-govinc="${f.id}">Registrar como mensalista</button>`:''}</div>`})()}
+       ${(()=>{const s=exameStatus(f);if(!s)return '';const al=s.dias<=EXAME_AVISO;
+         return `<div class="${al?(s.dias<0?'teste-alerta':'teste-info'):'teste-info'}" id="exameFicha" style="${al?'':'background:var(--surface-2);border-color:var(--line)'}"><b>Exame periódico: ${s.dias<0?`venceu em ${fmtData(s.venc)} (há ${-s.dias} dia(s))`:`próximo em ${fmtData(s.venc)}${al?` (faltam ${s.dias} dia(s))`:''}`}</b><span>Base: ${esc(s.base)}. De ano em ano; lance <b>EP</b> no ponto no dia do exame.</span>
+           ${dp?(S.exameEdit===f.id?`<form id="exameForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="exUlt">Último exame periódico em</label><input type="text" id="exUlt" name="ult" data-date="1" inputmode="numeric" value="${esc(f.ultExame||'')}" placeholder="DD/MM/AAAA (vazio = não informado)"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar</button><button class="btn" type="button" data-exameedit="">Cancelar</button></div></form>`
+             :`<span><button class="btn" data-exameedit="${f.id}">Informar data do último exame</button></span>`):''}</div>`})()}
        ${f.vinc==='avulso'&&!f.saida&&(dp||f.avulsoPrazo)?`<div class="teste-info" id="prazoFicha">${f.avulsoPrazo?`<b>Avulso por prazo até ${esc(f.avulsoPrazo.ate)}</b><span>Sem período de teste. Não recebe diária: recebe o salário (${pctTxt(f)} na 1ª quinzena e o restante na 2ª) e os benefícios do acordo, como mensalista. No fim do prazo, registre como mensalista ou dispense.</span>`:`<span>Se ele vai ficar como avulso por um tempo combinado (ex.: 6 meses), sem período de teste, marque aqui.</span>`}
          ${dp&&S.prazoEdit!==f.id?`<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-prazoedit="${f.id}">${f.avulsoPrazo?'Mudar o prazo':'Avulso por prazo'}</button>${f.avulsoPrazo?`<button class="btn" data-prazotirar="${f.id}">Tirar o prazo (volta ao período de teste)</button>`:''}</span>`:''}
          ${dp&&S.prazoEdit===f.id?`<form id="prazoForm" class="cad-form" style="margin:6px 0 0"><div class="field"><label for="pAte">Avulso por prazo, sem período de teste, até:</label><input type="text" id="pAte" name="ate" data-date="1" inputmode="numeric" value="${esc(f.avulsoPrazo?.ate||maisMeses(f.adm,6))}" placeholder="DD/MM/AAAA"></div><div id="formErr" class="err"></div><div class="actions"><button class="btn primary" type="submit">Salvar prazo</button><button class="btn" type="button" data-prazoedit="">Cancelar</button></div></form>`:''}</div>`:''}
@@ -2157,6 +2195,14 @@ $('#view').addEventListener('submit',e=>{
     x.de=de;if(x.vinc==='mensalista'&&f.admissao===`${dd(antes)}/${ANO}`)f.admissao=`${dd(de)}/${ANO}`;
     registrar(`Vínculo · ${f.nome}`,`${x.vinc==='mensalista'?'Mensalista':'Avulso'} desde ${dd(antes)}/${ANO}`,`${x.vinc==='mensalista'?'Mensalista':'Avulso'} desde ${dd(de)}/${ANO}`,motivo);
     S.vhEdit=null;render();return toast(`Data corrigida: ${x.vinc==='mensalista'?'mensalista':'avulso'} desde ${dd(de)}/${ANO}. Os valores das quinzenas foram recalculados.`);
+  }
+  if(fm.id==='exameForm'){
+    const f=byId(S.cadSel);if(!f)return;const v=fm.ult.value.trim();
+    if(v&&!lerData(v))return err('Data inválida. Use DD/MM/AAAA.');
+    if(v&&lerData(v)>new Date())return err('A data do último exame não pode ser no futuro.');
+    const antes=f.ultExame||'—';if(v)f.ultExame=v;else delete f.ultExame;
+    registrar(`Exame periódico · ${f.nome}`,antes,v||'—','Data do último exame');S.exameEdit=null;render();
+    return toast(v?`Último exame de ${f.nome}: ${v}. Próximo em ${fmtData(somaMeses(lerData(v),12))}.`:'Data do último exame apagada.');
   }
   if(fm.id==='adavForm'){
     const f=byId(S.cadSel),valor=parseBRL(fm.valor.value),data=fm.data.value.trim(),d=lerData(data);
@@ -3006,6 +3052,8 @@ $('#view').addEventListener('click',e=>{
   if(vhe){S.vhEdit=vhe.dataset.vhedit||null;render();if(S.vhEdit)$('#vhForm')?.scrollIntoView({block:'center'});return}
   const spe=e.target.closest('[data-salpedit]');
   if(spe){S.salpEdit=spe.dataset.salpedit||null;render();if(S.salpEdit)$('#salpForm')?.scrollIntoView({block:'center'});return}
+  const xe=e.target.closest('[data-exameedit]');
+  if(xe){S.exameEdit=xe.dataset.exameedit||null;render();if(S.exameEdit)$('#exameForm')?.scrollIntoView({block:'center'});return}
   const ae=e.target.closest('[data-adavedit]');
   if(ae){S.adavEdit=ae.dataset.adavedit||null;render();if(S.adavEdit)$('#adavForm')?.scrollIntoView({block:'center'});return}
   const ac=e.target.closest('[data-adavcancel]');
