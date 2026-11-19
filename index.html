@@ -1404,7 +1404,7 @@ const dm=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).pad
 // ---------- Exame periódico: de ano em ano ----------
 // base = o exame mais recente (EP ou EA lançado no ponto, de qualquer mês guardado, ou f.ultExame informado na ficha);
 // sem exame, vale o aniversário da admissão (registro). Alerta 30 dias antes e depois de vencido.
-const EXAME_AVISO=30;
+const EXAME_AVISO=30,EXAME_INICIO=new Date(2026,9,1); // início do uso do sistema (outubro/2026)
 const somaMeses=(d,n)=>new Date(d.getFullYear(),d.getMonth()+n,d.getDate());
 const diasEntre=(a,b)=>Math.round((b-a)/864e5);
 function dataRegistro(f){if(f.admissao&&lerData(f.admissao))return lerData(f.admissao);if(f.contrat?.vinc!=='avulso'&&lerData(f.adm))return lerData(f.adm);return null}
@@ -1421,9 +1421,10 @@ function exameStatus(f){
   const h=new Date();h.setHours(0,0,0,0);const ue=ultimoExame(f);
   if(ue){const venc=somaMeses(ue.d,12);return {venc,base:`último ${ue.orig} em ${fmtData(ue.d)}`,dias:diasEntre(h,venc)}}
   const reg=dataRegistro(f);if(!reg)return null;
-  // pelo aniversário da admissão: o deste ano (ou o próximo); se já passou e não há exame depois dele, está vencido
-  let an=new Date(h.getFullYear(),reg.getMonth(),reg.getDate());if(an<=reg)an=somaMeses(reg,12);
-  const prox=an<h&&diasEntre(an,h)>60?new Date(h.getFullYear()+1,reg.getMonth(),reg.getDate()):an;
+  // pelo aniversário da admissão. Último aniversário até hoje: se for de quando o sistema já estava em uso (EXAME_INICIO)
+  // e não há exame registrado, está vencido até lançar o EP; aniversários anteriores ao uso do sistema são ignorados
+  let an=new Date(h.getFullYear(),reg.getMonth(),reg.getDate());if(an>h)an=new Date(h.getFullYear()-1,reg.getMonth(),reg.getDate());
+  const prox=an>reg&&an>=EXAME_INICIO?an:an>reg?somaMeses(an,12):somaMeses(reg,12);
   if(prox<=reg)return null;
   return {venc:prox,base:`aniversário da admissão (${fmtData(reg)})`,dias:diasEntre(h,prox)};
 }
